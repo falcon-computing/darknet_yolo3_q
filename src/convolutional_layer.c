@@ -455,32 +455,62 @@ void forward_convolutional_layer(convolutional_layer l, network net)
         net.input = l.binary_input;
     }
 
+    long weight_coef = pow(2, l.wpos);
+    long bias_coef = pow(2, l.wpos + l.ipos1);
+    //long out_coef = pow(2, l.opos);
+
     int m = l.n/l.groups;
     int k = l.size*l.size*l.c/l.groups;
     int n = l.out_w*l.out_h;
     for(i = 0; i < l.batch; ++i){
         for(j = 0; j < l.groups; ++j){
             float *a = l.weights + j*l.nweights/l.groups;
+            float *a_q = calloc(l.c * l.n*l.size*l.size, sizeof(float));  // we assume groups is always 1. Eventhough types should be int, we keep them in float for faster development, but they actually storing int numbers
+            int i_q;
+            for (i_q = 0; i_q < l.c * l.n*l.size*l.size; ++i_q)
+                a_q[i_q] = weight_coef *  a[i_q]; // we do not round here bc this should result an integer without rounding 
             float *b = net.workspace;
             float *c = l.output + (i*l.groups + j)*n*m;
-            float *im =  net.input + (i*l.groups + j)*l.c/l.groups*l.h*l.w;
+            float *im = net.input + (i*l.groups + j)*l.c/l.groups*l.h*l.w;
 
             if (l.size == 1) {
                 b = im;
             } else {
                 im2col_cpu(im, l.c/l.groups, l.h, l.w, l.size, l.stride, l.pad, b);
             }
-            gemm(0,0,m,n,k,1,a,k,b,n,1,c,n);
+            gemm(0,0,m,n,k,1,a_q,k,b,n,1,c,n);
         }
     }
 
     if(l.batch_normalize){
         forward_batchnorm_layer(l, net);
     } else {
-        add_bias(l.output, l.biases, l.batch, l.n, l.out_h*l.out_w);
+        float* bias_q = calloc(l.n, sizeof(float));
+        int i_q;
+        for (i_q = 0; i_q < l.n; ++i_q)
+            bias_q[i_q] = l.biases[i_q] * bias_coef;
+        add_bias(l.output, bias_q, l.batch, l.n, l.out_h*l.out_w);
+
     }
 
-    activate_array(l.output, l.outputs*l.batch, l.activation);
+    int right_shift_cnt = (l.wpos + l.ipos1 - l.opos);
+    int div_val = pow(2, right_shift_cnt);
+    int i_q;
+    for (i_q = 0; i_q < l.n * l.out_w * l.out_h; ++i_q){
+        l.output[i_q] = xilinx_quantizer(l.output[i_q], div_val);
+    }
+
+    //activate_array(l.output, l.outputs*l.batch, l.activation);
+    if (l.activation == LEAKY){
+        for(i_q = 0; i_q < l.n * l.out_w * l.out_h; ++i_q){
+            if (l.output[i_q] < 0){
+                float curr_activation = l.output[i_q];
+                curr_activation = curr_activation * -104;
+                l.output[i_q] = xilinx_quantizer(curr_activation, 1024);
+            }
+        }
+
+    }
     if(l.binary || l.xnor) swap_binary(&l);
 }
 

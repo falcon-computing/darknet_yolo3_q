@@ -61,9 +61,27 @@ void resize_shortcut_layer(layer *l, int w, int h)
 
 void forward_shortcut_layer(const layer l, network net)
 {
-    copy_cpu(l.outputs*l.batch, net.input, 1, l.output, 1);
-    shortcut_cpu(l.batch, l.w, l.h, l.c, net.layers[l.index].output, l.out_w, l.out_h, l.out_c, l.alpha, l.beta, l.output);
+    float* near_output = calloc(l.outputs, sizeof(float));
+    float* far_output = calloc(net.layers[l.index].outputs, sizeof(float));
+    int max_ipos = (l.ipos1 > l.ipos2) ? l.ipos1 : l.ipos2;
+
+    int near_multiplier = pow(2, max_ipos - l.ipos1);
+    int i_q;
+    for (i_q = 0; i_q < l.outputs; ++i_q)
+        near_output[i_q] = near_multiplier * net.input[i_q]; 
+    copy_cpu(l.outputs*l.batch, near_output, 1, l.output, 1);
+
+    int far_multiplier = pow(2, max_ipos - l.ipos2);
+    for (i_q = 0; i_q < net.layers[l.index].outputs; ++i_q)
+        far_output[i_q] = far_multiplier * net.layers[l.index].output[i_q];
+      
+    shortcut_cpu(l.batch, l.w, l.h, l.c, far_output, l.out_w, l.out_h, l.out_c, l.alpha, l.beta, l.output);
     activate_array(l.output, l.outputs*l.batch, l.activation);
+
+    int divider = pow(2, max_ipos - l.opos);
+    for (i_q = 0; i_q < l.outputs; ++i_q){
+        l.output[i_q] = xilinx_quantizer(l.output[i_q], divider);
+    }
 }
 
 void backward_shortcut_layer(const layer l, network net)

@@ -184,6 +184,16 @@ convolutional_layer parse_convolutional(list *options, size_params params)
     int pad = option_find_int_quiet(options, "pad",0);
     int padding = option_find_int_quiet(options, "padding",0);
     int groups = option_find_int_quiet(options, "groups", 1);
+
+    int bpos_bw = option_find_int(options, "bpos_bw", 8);
+    int bpos = option_find_int(options, "bpos", -1);
+    int ipos_bw = option_find_int(options, "ipos_bw", 8);
+    int ipos = option_find_int(options, "ipos", -1);
+    int wpos_bw = option_find_int(options, "wpos_bw", 8);
+    int wpos = option_find_int(options, "wpos", -1);
+    int opos_bw = option_find_int(options, "opos_bw", 8);
+    int opos = option_find_int(options, "opos", -1);
+
     if(pad) padding = size/2;
 
     char *activation_s = option_find_str(options, "activation", "logistic");
@@ -202,6 +212,15 @@ convolutional_layer parse_convolutional(list *options, size_params params)
     convolutional_layer layer = make_convolutional_layer(batch,h,w,c,n,groups,size,stride,padding,activation, batch_normalize, binary, xnor, params.net->adam);
     layer.flipped = option_find_int_quiet(options, "flipped", 0);
     layer.dot = option_find_float_quiet(options, "dot", 0);
+
+    layer.bpos_bw = bpos_bw;
+    layer.bpos = bpos;
+    layer.wpos_bw = wpos_bw;
+    layer.wpos = wpos;
+    layer.ipos1_bw = ipos_bw;
+    layer.ipos1 = ipos;
+    layer.opos_bw = opos_bw;
+    layer.opos = opos;
 
     return layer;
 }
@@ -539,6 +558,10 @@ layer parse_batchnorm(list *options, size_params params)
 layer parse_shortcut(list *options, size_params params, network *net)
 {
     char *l = option_find(options, "from");
+    int far_ipos = option_find_int(options, "far_ipos", -1);
+    int near_ipos = option_find_int(options, "near_ipos", -1);
+    int opos = option_find_int(options, "opos", -1);
+
     int index = atoi(l);
     if(index < 0) index = params.index + index;
 
@@ -546,6 +569,9 @@ layer parse_shortcut(list *options, size_params params, network *net)
     layer from = net->layers[index];
 
     layer s = make_shortcut_layer(batch, index, params.w, params.h, params.c, from.out_w, from.out_h, from.out_c);
+    s.ipos1 = near_ipos;
+    s.ipos2 = far_ipos;
+    s.opos = opos;
 
     char *activation_s = option_find_str(options, "activation", "linear");
     ACTIVATION activation = get_activation(activation_s);
@@ -593,7 +619,13 @@ layer parse_upsample(list *options, size_params params, network *net)
 {
 
     int stride = option_find_int(options, "stride",2);
+    int ipos = option_find_int(options, "ipos",-1);
+    int opos = option_find_int(options, "opos",-1);
+
     layer l = make_upsample_layer(params.batch, params.w, params.h, params.c, stride);
+
+    l.ipos1 = ipos;
+    l.opos = opos;
     l.scale = option_find_float_quiet(options, "scale", 1);
     return l;
 }

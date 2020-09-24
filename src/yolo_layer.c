@@ -134,6 +134,12 @@ void forward_yolo_layer(const layer l, network net)
     int i,j,b,t,n;
     memcpy(l.output, net.input, l.outputs*l.batch*sizeof(float));
 
+    int i_q;
+
+    for(i_q = 0; i_q < l.outputs; ++i_q){
+        l.output[i_q] = l.output[i_q] / 4;
+    }
+
 #ifndef GPU
     for (b = 0; b < l.batch; ++b){
         for(n = 0; n < l.n; ++n){

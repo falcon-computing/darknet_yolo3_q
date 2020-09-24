@@ -83,5 +83,17 @@ static inline float leaky_gradient(float x){return (x>0) ? 1 : .1;}
 static inline float tanh_gradient(float x){return 1-x*x;}
 static inline float plse_gradient(float x){return (x < 0 || x > 1) ? .01 : .125;}
 
+static inline float xilinx_quantizer(float input, int divider)
+{
+    if (input < 0 && ((input / divider) - floor((input / divider)) == 0.5))
+    {
+        return ceil(input / divider);
+    }
+    else
+    {
+        return round(input / divider);
+    }
+}
+
 #endif
 

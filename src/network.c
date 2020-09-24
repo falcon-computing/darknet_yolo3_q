@@ -498,6 +498,12 @@ float *network_predict(network *net, float *input)
 {
     network orig = *net;
     net->input = input;
+    int i_q;
+    for (i_q = 0; i_q < net->inputs; ++i_q)
+    {
+        net->input[i_q] = xilinx_quantizer(net->input[i_q] * 64, 1);
+    }
+    
     net->truth = 0;
     net->train = 0;
     net->delta = 0;
