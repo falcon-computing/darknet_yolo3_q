@@ -83,16 +83,43 @@ static inline float leaky_gradient(float x){return (x>0) ? 1 : .1;}
 static inline float tanh_gradient(float x){return 1-x*x;}
 static inline float plse_gradient(float x){return (x < 0 || x > 1) ? .01 : .125;}
 
-static inline float xilinx_quantizer(float input, int divider)
+static inline float xilinx_quantizer(double input, int divider)
 {
-    if (input < 0 && ((input / divider) - floor((input / divider)) == 0.5))
+    double di, fl, rn, ce;
+    di = input / divider;
+    fl = floor(di);
+    rn = round(di);
+    ce = ceil(di);
+    float ret_val;
+
+    if (input < 0 && (di - fl == 0.5))
     {
-        return ceil(input / divider);
+        ret_val = ce;
     }
     else
     {
-        return round(input / divider);
+        ret_val = rn;
     }
+    ret_val = (ret_val < -128.0)? -128.0 : ret_val;
+    ret_val = (ret_val> 127.0)? 127 : ret_val;
+    return ret_val;
+}
+
+static inline int64_t sum_f(float* in, int len){
+    int64_t sum = 0;
+    int i_q;
+    for (i_q = 0; i_q < len; i_q ++){
+        sum = sum + (int64_t)in[i_q];
+    }
+    return sum;
+}
+static inline int64_t sum_i(int* in, int len){
+    int64_t sum = 0;
+    int i_q;
+    for (i_q = 0; i_q < len; i_q ++){
+        sum = sum + in[i_q];
+    }
+    return sum;
 }
 
 #endif

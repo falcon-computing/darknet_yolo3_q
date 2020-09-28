@@ -419,6 +419,17 @@ void add_bias(float *output, float *biases, int batch, int n, int size)
         }
     }
 }
+void add_bias_q(int *output, int *biases, int batch, int n, int size)
+{
+    int i,j,b;
+    for(b = 0; b < batch; ++b){
+        for(i = 0; i < n; ++i){
+            for(j = 0; j < size; ++j){
+                output[(b*n + i)*size + j] += biases[i];
+            }
+        }
+    }
+}
 
 void scale_bias(float *output, float *scales, int batch, int n, int size)
 {
@@ -444,9 +455,15 @@ void backward_bias(float *bias_updates, float *delta, int batch, int n, int size
 
 void forward_convolutional_layer(convolutional_layer l, network net)
 {
-    int i, j;
+    static int conv_index = 0;
 
-    fill_cpu(l.outputs*l.batch, 0, l.output, 1);
+    conv_index += 1;
+
+    int i, j;
+    
+    int* temp_sum = calloc(l.outputs, sizeof(int));
+    
+    //fill_cpu(l.outputs*l.batch, 0, l.output, 1);
 
     if(l.xnor){
         binarize_weights(l.weights, l.n, l.c/l.groups*l.size*l.size, l.binary_weights);
@@ -456,8 +473,9 @@ void forward_convolutional_layer(convolutional_layer l, network net)
     }
 
     long weight_coef = pow(2, l.wpos);
-    long bias_coef = pow(2, l.wpos + l.ipos1);
+    long bias_coef = pow(2, l.wpos + l.ipos1);  // (l.wpos + l.ipos1) is always bigger than bpos
     //long out_coef = pow(2, l.opos);
+
 
     int m = l.n/l.groups;
     int k = l.size*l.size*l.c/l.groups;
@@ -468,50 +486,62 @@ void forward_convolutional_layer(convolutional_layer l, network net)
             float *a_q = calloc(l.c * l.n*l.size*l.size, sizeof(float));  // we assume groups is always 1. Eventhough types should be int, we keep them in float for faster development, but they actually storing int numbers
             int i_q;
             for (i_q = 0; i_q < l.c * l.n*l.size*l.size; ++i_q)
-                a_q[i_q] = weight_coef *  a[i_q]; // we do not round here bc this should result an integer without rounding 
-            float *b = net.workspace;
-            float *c = l.output + (i*l.groups + j)*n*m;
+                a_q[i_q] = weight_coef *  a[i_q]; // we do not round here bc this should result an integer without rounding
+            int sum_wq = sum_f(a_q, l.c * l.n*l.size*l.size);   
+            float *b = net.workspace;  // we keep b in float but it is actually soring int8. I dod not want to mess around so I keep it in float
+            //float *c = l.output + (i*l.groups + j)*n*m;
+            int *c_q = temp_sum + (i*l.groups + j)*n*m; 
             float *im = net.input + (i*l.groups + j)*l.c/l.groups*l.h*l.w;
 
             if (l.size == 1) {
                 b = im;
             } else {
                 im2col_cpu(im, l.c/l.groups, l.h, l.w, l.size, l.stride, l.pad, b);
-            }
-            gemm(0,0,m,n,k,1,a_q,k,b,n,1,c,n);
+            }   
+            int sum_bq = sum_f(net.input, l.inputs);
+            gemm_q(0,0,m,n,k,1,a_q,k,b,n,1,c_q,n);
+            int64_t sum_conv = sum_i(c_q, l.outputs);
+            int xl =0;
         }
     }
+    
 
     if(l.batch_normalize){
         forward_batchnorm_layer(l, net);
     } else {
-        float* bias_q = calloc(l.n, sizeof(float));
+        int* bias_q = calloc(l.n, sizeof(float));
         int i_q;
         for (i_q = 0; i_q < l.n; ++i_q)
             bias_q[i_q] = l.biases[i_q] * bias_coef;
-        add_bias(l.output, bias_q, l.batch, l.n, l.out_h*l.out_w);
+        add_bias_q(temp_sum, bias_q, l.batch, l.n, l.out_h*l.out_w);
 
     }
+    int64_t sum_conv = sum_i(temp_sum, l.outputs);
 
     int right_shift_cnt = (l.wpos + l.ipos1 - l.opos);
     int div_val = pow(2, right_shift_cnt);
     int i_q;
-    for (i_q = 0; i_q < l.n * l.out_w * l.out_h; ++i_q){
-        l.output[i_q] = xilinx_quantizer(l.output[i_q], div_val);
-    }
+    // for (i_q = 0; i_q < l.n * l.out_w * l.out_h; ++i_q){
+    //     l.output[i_q] = xilinx_quantizer(temp_sum[i_q], div_val);
+    // }
 
     //activate_array(l.output, l.outputs*l.batch, l.activation);
     if (l.activation == LEAKY){
-        for(i_q = 0; i_q < l.n * l.out_w * l.out_h; ++i_q){
-            if (l.output[i_q] < 0){
-                float curr_activation = l.output[i_q];
-                curr_activation = curr_activation * -104;
-                l.output[i_q] = xilinx_quantizer(curr_activation, 1024);
+        for(i_q = 0; i_q < l.outputs; ++i_q){
+            if (temp_sum[i_q] < 0){
+                double curr_activation = temp_sum[i_q];
+                curr_activation = curr_activation * 104;
+                l.output[i_q] = xilinx_quantizer(curr_activation, 1024 * div_val);
+            }
+            else{
+                double curr_activation = temp_sum[i_q];
+                l.output[i_q] = xilinx_quantizer(curr_activation,div_val);
             }
         }
 
     }
     if(l.binary || l.xnor) swap_binary(&l);
+    int sum_act = sum_f(l.output, l.outputs);
 }
 
 void backward_convolutional_layer(convolutional_layer l, network net)

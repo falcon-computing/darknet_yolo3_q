@@ -591,10 +591,26 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         //resize_network(net, sized.w, sized.h);
         layer l = net->layers[net->n-1];
 
+        //sunthetic image
+        float* synth_img = calloc(416 * 416 * 3, sizeof(float));
+
+        int i_wq, i_hq, i_cq, idx;
+        idx = 0;
+        for(i_cq = 0 ; i_cq < 3;++ i_cq){
+            for (i_hq = 0; i_hq < 416; ++i_hq){
+                for (i_wq = 0; i_wq < 416; ++i_wq){
+                    synth_img[idx] = ((i_wq + i_hq + i_cq) % 256) / 255.0; 
+                    idx++;
+                }
+            }
+
+        }
+
 
         float *X = sized.data;
+        float *X_q = synth_img; 
         time=what_time_is_it_now();
-        network_predict(net, X);
+        network_predict(net, X_q);
         printf("%s: Predicted in %f seconds.\n", input, what_time_is_it_now()-time);
         int nboxes = 0;
         detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);

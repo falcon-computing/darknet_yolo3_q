@@ -61,6 +61,10 @@ void resize_shortcut_layer(layer *l, int w, int h)
 
 void forward_shortcut_layer(const layer l, network net)
 {
+    static int shortcut_index = 0;
+
+    shortcut_index += 1;
+
     float* near_output = calloc(l.outputs, sizeof(float));
     float* far_output = calloc(net.layers[l.index].outputs, sizeof(float));
     int max_ipos = (l.ipos1 > l.ipos2) ? l.ipos1 : l.ipos2;

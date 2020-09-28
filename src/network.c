@@ -503,6 +503,7 @@ float *network_predict(network *net, float *input)
     {
         net->input[i_q] = xilinx_quantizer(net->input[i_q] * 64, 1);
     }
+    int sum_aq = sum_f(net->input, net->inputs);
     
     net->truth = 0;
     net->train = 0;
