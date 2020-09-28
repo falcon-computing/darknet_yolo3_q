@@ -75,10 +75,14 @@ void forward_shortcut_layer(const layer l, network net)
         near_output[i_q] = near_multiplier * net.input[i_q]; 
     copy_cpu(l.outputs*l.batch, near_output, 1, l.output, 1);
 
+    int sum_near = sum_f(l.output, l.outputs);
+
     int far_multiplier = pow(2, max_ipos - l.ipos2);
     for (i_q = 0; i_q < net.layers[l.index].outputs; ++i_q)
         far_output[i_q] = far_multiplier * net.layers[l.index].output[i_q];
-      
+
+    int sum_far = sum_f(far_output, l.outputs);
+
     shortcut_cpu(l.batch, l.w, l.h, l.c, far_output, l.out_w, l.out_h, l.out_c, l.alpha, l.beta, l.output);
     activate_array(l.output, l.outputs*l.batch, l.activation);
 
@@ -86,6 +90,7 @@ void forward_shortcut_layer(const layer l, network net)
     for (i_q = 0; i_q < l.outputs; ++i_q){
         l.output[i_q] = xilinx_quantizer(l.output[i_q], divider);
     }
+    int sum_act = sum_f(l.output, l.outputs);
 }
 
 void backward_shortcut_layer(const layer l, network net)
