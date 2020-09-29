@@ -521,32 +521,34 @@ void forward_convolutional_layer(convolutional_layer l, network net)
     int right_shift_cnt = (l.wpos + l.ipos1 - l.opos);
     int div_val = pow(2, right_shift_cnt);
     int i_q;
-    // for (i_q = 0; i_q < l.n * l.out_w * l.out_h; ++i_q){
-    //     l.output[i_q] = xilinx_quantizer(temp_sum[i_q], div_val);
-    // }
+    for (i_q = 0; i_q < l.n * l.out_w * l.out_h; ++i_q){
+        l.output[i_q] = xilinx_quantizer(temp_sum[i_q], div_val);
+    }
 
     //activate_array(l.output, l.outputs*l.batch, l.activation);
     if (l.activation == LEAKY){
         for(i_q = 0; i_q < l.outputs; ++i_q){
             if (temp_sum[i_q] < 0){
-                double curr_activation = temp_sum[i_q];
+                //double curr_activation = temp_sum[i_q];
+                double curr_activation = l.output[i_q];
                 curr_activation = curr_activation * 104;
-                l.output[i_q] = xilinx_quantizer(curr_activation, 1024 * div_val);
+                //l.output[i_q] = xilinx_quantizer(curr_activation, 1024 * div_val);
+                l.output[i_q] = xilinx_quantizer(curr_activation, 1024);
             }
-            else{
-                double curr_activation = temp_sum[i_q];
-                l.output[i_q] = xilinx_quantizer(curr_activation,div_val);
-            }
+            // else{
+            //     double curr_activation = temp_sum[i_q];
+            //     l.output[i_q] = xilinx_quantizer(curr_activation,div_val);
+            // }
         }
 
     }
-    else if (l.activation == LINEAR)
-    {
-        for(i_q = 0; i_q < l.outputs; ++i_q){
-            double curr_activation = temp_sum[i_q];
-            l.output[i_q] = xilinx_quantizer(curr_activation,div_val);
-        }
-    }
+    // else if (l.activation == LINEAR)
+    // {
+    //     for(i_q = 0; i_q < l.outputs; ++i_q){
+    //         double curr_activation = temp_sum[i_q];
+    //         l.output[i_q] = xilinx_quantizer(curr_activation,div_val);
+    //     }
+    // }
     
     if(l.binary || l.xnor) swap_binary(&l);
     int sum_act = sum_f(l.output, l.outputs);
