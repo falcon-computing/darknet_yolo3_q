@@ -83,10 +83,10 @@ static inline float leaky_gradient(float x){return (x>0) ? 1 : .1;}
 static inline float tanh_gradient(float x){return 1-x*x;}
 static inline float plse_gradient(float x){return (x < 0 || x > 1) ? .01 : .125;}
 
-static inline float xilinx_quantizer(double input, int divider)
+static inline int8_t xilinx_quantizer(int32_t input, int divider)
 {
     double di, fl, rn, ce;
-    di = input / divider;
+    di = (double)input / divider;
     fl = floor(di);
     rn = round(di);
     ce = ceil(di);
