@@ -87,9 +87,10 @@ void forward_shortcut_layer(const layer l, network net)
     shortcut_cpu(l.batch, l.w, l.h, l.c, far_output, l.out_w, l.out_h, l.out_c, l.alpha, l.beta, near_output);
     // activate_array(l.output, l.outputs*l.batch, l.activation); In yolo V3 all the short cut layers have linear activation so we can comment this line. 
 
-    int divider = pow(2, max_ipos - l.opos);
+    //int divider = pow(2, max_ipos - l.opos);
     for (i_q = 0; i_q < l.outputs; ++i_q){
-        l.output[i_q] = xilinx_quantizer(near_output[i_q], divider);
+        //l.output[i_q] = xilinx_quantizer(near_output[i_q], divider);
+        l.output[i_q] = xilinx_quantizer_shift(near_output[i_q], max_ipos - l.opos);
     }
     int sum_act = sum_f(l.output, l.outputs);
 }

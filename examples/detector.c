@@ -606,7 +606,6 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 
         }
 
-
         float *X = sized.data;
         float *X_q = synth_img; 
         time=what_time_is_it_now();

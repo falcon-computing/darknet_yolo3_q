@@ -83,7 +83,21 @@ static inline float leaky_gradient(float x){return (x>0) ? 1 : .1;}
 static inline float tanh_gradient(float x){return 1-x*x;}
 static inline float plse_gradient(float x){return (x < 0 || x > 1) ? .01 : .125;}
 
-static inline int8_t xilinx_quantizer(int32_t input, int divider)
+static inline int8_t xilinx_quantizer_shift(int32_t input, int shift_count)
+{
+    if (shift_count > 0){
+        if (input & (1<<(shift_count - 1))){
+            return (input >> shift_count) + 1;
+        }
+        else{
+            return (input >> shift_count);
+        }
+    }
+    else{
+        return input;
+    }
+}
+/* static inline int8_t xilinx_quantizer(int32_t input, int divider)
 {
     double di, fl, rn, ce;
     di = (double)input / divider;
@@ -103,7 +117,7 @@ static inline int8_t xilinx_quantizer(int32_t input, int divider)
     ret_val = (ret_val < -128.0)? -128.0 : ret_val;
     ret_val = (ret_val> 127.0)? 127 : ret_val;
     return ret_val;
-}
+} */
 
 static inline int64_t sum_f(float* in, int len){
     int64_t sum = 0;
