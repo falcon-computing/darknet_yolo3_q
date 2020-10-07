@@ -1201,7 +1201,7 @@ void load_convolutional_weights(layer l, FILE *fp)
     }
     if(l.numload) l.n = l.numload;
     int num = l.c/l.groups*l.n*l.size*l.size;
-    fread(l.biases, sizeof(int8_t), l.n, fp);
+    fread(l.biases, sizeof(int32_t), l.n, fp);
     if (l.batch_normalize && (!l.dontloadscales)){
         fread(l.scales, sizeof(float), l.n, fp);
         fread(l.rolling_mean, sizeof(float), l.n, fp);

@@ -272,7 +272,7 @@ extern "C"
 
         float *binary_weights;
 
-        int8_t *biases;
+        int32_t *biases;
         float *yolo_bias;
         float *bias_updates;
 

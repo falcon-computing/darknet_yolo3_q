@@ -195,7 +195,7 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
     l.weights = calloc(c/groups*n*size*size, sizeof(int8_t));
     l.weight_updates = calloc(c/groups*n*size*size, sizeof(float));
 
-    l.biases = calloc(n, sizeof(int8_t));
+    l.biases = calloc(n, sizeof(int32_t));
     l.bias_updates = calloc(n, sizeof(float));
 
     l.nweights = c/groups*n*size*size;
@@ -419,7 +419,7 @@ void add_bias(float *output, float *biases, int batch, int n, int size)
         }
     }
 }
-void add_bias_q(int *output, int *biases, int batch, int n, int size)
+void add_bias_q(int32_t *output, int32_t *biases, int batch, int n, int size)
 {
     int i,j,b;
     for(b = 0; b < batch; ++b){
@@ -505,11 +505,11 @@ void forward_convolutional_layer(convolutional_layer l, network net)
     if(l.batch_normalize){
         forward_batchnorm_layer(l, net);
     } else {
-        int32_t* bias_q = calloc(l.n, sizeof(int32_t));
-        int i_q;
-        for (i_q = 0; i_q < l.n; ++i_q)
-            bias_q[i_q] = l.biases[i_q] * pow(2, l.wpos + l.ipos1 - l.bpos);  // we will precompute this bias adjustment later
-        add_bias_q(temp_sum, bias_q, l.batch, l.n, l.out_h*l.out_w);
+        //int32_t* bias_q = calloc(l.n, sizeof(int32_t));
+        //int i_q;
+        //for (i_q = 0; i_q < l.n; ++i_q)
+        //    bias_q[i_q] = l.biases[i_q] * pow(2, l.wpos + l.ipos1 - l.bpos);  // we will precompute this bias adjustment later
+        add_bias_q(temp_sum, l.biases, l.batch, l.n, l.out_h*l.out_w);
     }
     int64_t sum_conv = sum_i(temp_sum, l.outputs);
 
