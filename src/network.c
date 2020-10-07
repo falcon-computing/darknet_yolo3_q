@@ -497,11 +497,11 @@ void top_predictions(network *net, int k, int *index)
 float *network_predict(network *net, float *input)
 {
     network orig = *net;
-    net->input = input;
+    // net->input = input;
     int i_q;
     for (i_q = 0; i_q < net->inputs; ++i_q)
     {
-        net->input[i_q] = xilinx_quantizer(round(net->input[i_q] * 64), 1);
+        net->input[i_q] = xilinx_quantizer(round(input[i_q] * 64), 1);
     }
     int sum_aq = sum_f(net->input, net->inputs);
     

@@ -71,10 +71,10 @@ void gemm(int TA, int TB, int M, int N, int K, float ALPHA,
     gemm_cpu( TA,  TB,  M, N, K, ALPHA,A,lda, B, ldb,BETA,C,ldc);
 }
 void gemm_q(int TA, int TB, int M, int N, int K, float ALPHA, 
-        float *A, int lda, 
-        float *B, int ldb,
+        int8_t *A, int lda, 
+        int8_t *B, int ldb,
         float BETA,
-        int *C, int ldc)
+        int32_t *C, int ldc)
 {
     gemm_cpu_q( TA,  TB,  M, N, K, ALPHA,A,lda, B, ldb,BETA,C,ldc);
 }
@@ -96,9 +96,9 @@ void gemm_nn(int M, int N, int K, float ALPHA,
     }
 }
 void gemm_nn_q(int M, int N, int K, float ALPHA, 
-        float *A, int lda, 
-        float *B, int ldb,
-        int *C, int ldc)
+        int8_t *A, int lda, 
+        int8_t *B, int ldb,
+        int32_t *C, int ldc)
 {
     int i,j,k;
     #pragma omp parallel for
@@ -190,10 +190,10 @@ void gemm_cpu(int TA, int TB, int M, int N, int K, float ALPHA,
 }
 
 void gemm_cpu_q(int TA, int TB, int M, int N, int K, float ALPHA, 
-        float *A, int lda, 
-        float *B, int ldb,
+        int8_t *A, int lda, 
+        int8_t *B, int ldb,
         float BETA,
-        int *C, int ldc)
+        int32_t *C, int ldc)
 {
     //printf("cpu: %d %d %d %d %d %f %d %d %f %d\n",TA, TB, M, N, K, ALPHA, lda, ldb, BETA, ldc);
     int i, j;

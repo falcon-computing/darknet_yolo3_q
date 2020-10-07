@@ -77,13 +77,14 @@ void forward_route_layer(const route_layer l, network net)
     int offset = 0;
     for(i = 0; i < l.n; ++i){
         int index = l.input_layers[i];
-        float *input = net.layers[index].output;
+        int8_t *input = net.layers[index].output;
         int input_size = l.input_sizes[i];
         for(j = 0; j < l.batch; ++j){
-            copy_cpu(input_size, input + j*input_size, 1, l.output + offset + j*l.outputs, 1);
+            copy_cpu_int8(input_size, input + j*input_size, 1, l.output + offset + j*l.outputs, 1);
         }
         offset += input_size;
     }
+    int temp;
 }
 
 void backward_route_layer(const route_layer l, network net)

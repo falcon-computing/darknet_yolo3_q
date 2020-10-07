@@ -121,6 +121,14 @@ static inline int64_t sum_i(int* in, int len){
     }
     return sum;
 }
+static inline int64_t sum_i8(int8_t* in, int len){
+    int64_t sum = 0;
+    int i_q;
+    for (i_q = 0; i_q < len; i_q ++){
+        sum = sum + in[i_q];
+    }
+    return sum;
+}
 
 #endif
 

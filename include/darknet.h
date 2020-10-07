@@ -272,17 +272,19 @@ extern "C"
 
         float *binary_weights;
 
-        float *biases;
+        int8_t *biases;
+        float *yolo_bias;
         float *bias_updates;
 
         float *scales;
         float *scale_updates;
 
-        float *weights;
+        int8_t *weights;
         float *weight_updates;
 
         float *delta;
-        float *output;
+        int8_t *output;
+        float *yolo_out;
         float *loss;
         float *squared;
         float *norms;
@@ -527,10 +529,10 @@ extern "C"
         int gpu_index;
         tree *hierarchy;
 
-        float *input;
+        int8_t *input;
         float *truth;
         float *delta;
-        float *workspace;
+        int8_t *workspace;
         int train;
         int index;
         float *cost;
@@ -692,6 +694,7 @@ extern "C"
     float dot_cpu(int N, float *X, int INCX, float *Y, int INCY);
     void axpy_cpu(int N, float ALPHA, float *X, int INCX, float *Y, int INCY);
     void copy_cpu(int N, float *X, int INCX, float *Y, int INCY);
+    void copy_cpu_int8(int N, int8_t *X, int INCX, int8_t *Y, int INCY);
     void scal_cpu(int N, float ALPHA, float *X, int INCX);
     void fill_cpu(int N, float ALPHA, float *X, int INCX);
     void normalize_cpu(float *x, float *mean, float *variance, int batch, int filters, int spatial);

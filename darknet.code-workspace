@@ -23,7 +23,14 @@
 			"type_traits": "cpp",
 			"unordered_map": "cpp",
 			"utility": "cpp",
-			"vector": "cpp"
+			"vector": "cpp",
+			"*.tcc": "cpp",
+			"algorithm": "cpp",
+			"random": "cpp",
+			"numeric": "cpp",
+			"ostream": "cpp",
+			"sstream": "cpp",
+			"streambuf": "cpp"
 		}
 	}
 }

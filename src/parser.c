@@ -353,7 +353,7 @@ layer parse_yolo(list *options, size_params params)
         }
         for(i = 0; i < n; ++i){
             float bias = atof(a);
-            l.biases[i] = bias;
+            l.yolo_bias[i] = bias;
             a = strchr(a, ',')+1;
         }
     }
@@ -1201,7 +1201,7 @@ void load_convolutional_weights(layer l, FILE *fp)
     }
     if(l.numload) l.n = l.numload;
     int num = l.c/l.groups*l.n*l.size*l.size;
-    fread(l.biases, sizeof(float), l.n, fp);
+    fread(l.biases, sizeof(int8_t), l.n, fp);
     if (l.batch_normalize && (!l.dontloadscales)){
         fread(l.scales, sizeof(float), l.n, fp);
         fread(l.rolling_mean, sizeof(float), l.n, fp);
@@ -1233,7 +1233,7 @@ void load_convolutional_weights(layer l, FILE *fp)
             printf("\n");
         }
     }
-    fread(l.weights, sizeof(float), num, fp);
+    fread(l.weights, sizeof(int8_t), num, fp);
     //if(l.c == 3) scal_cpu(num, 1./256, l.weights, 1);
     if (l.flipped) {
         transpose_matrix(l.weights, l.c*l.size*l.size, l.n);

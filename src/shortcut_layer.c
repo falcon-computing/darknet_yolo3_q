@@ -65,15 +65,16 @@ void forward_shortcut_layer(const layer l, network net)
 
     shortcut_index += 1;
 
-    float* near_output = calloc(l.outputs, sizeof(float));
-    float* far_output = calloc(net.layers[l.index].outputs, sizeof(float));
+    int32_t* near_output = calloc(l.outputs, sizeof(int32_t));  // we need to use int32 here as input1 or input2 need to shift left (based on the difference between ipos1 and ipos2) the sum together
+    int32_t* far_output = calloc(net.layers[l.index].outputs, sizeof(int32_t));
     int max_ipos = (l.ipos1 > l.ipos2) ? l.ipos1 : l.ipos2;
 
-    int near_multiplier = pow(2, max_ipos - l.ipos1);
+    int32_t near_multiplier = pow(2, max_ipos - l.ipos1);
     int i_q;
     for (i_q = 0; i_q < l.outputs; ++i_q)
-        near_output[i_q] = near_multiplier * net.input[i_q]; 
-    copy_cpu(l.outputs*l.batch, near_output, 1, l.output, 1);
+        near_output[i_q] = near_multiplier * net.input[i_q];
+        
+    //copy_cpu(l.outputs*l.batch, near_output, 1, l.output, 1);  we need to put result to the output after adjusting the range with output opos
 
     int sum_near = sum_f(l.output, l.outputs);
 
@@ -83,12 +84,12 @@ void forward_shortcut_layer(const layer l, network net)
 
     int sum_far = sum_f(far_output, l.outputs);
 
-    shortcut_cpu(l.batch, l.w, l.h, l.c, far_output, l.out_w, l.out_h, l.out_c, l.alpha, l.beta, l.output);
-    activate_array(l.output, l.outputs*l.batch, l.activation);
+    shortcut_cpu(l.batch, l.w, l.h, l.c, far_output, l.out_w, l.out_h, l.out_c, l.alpha, l.beta, near_output);
+    // activate_array(l.output, l.outputs*l.batch, l.activation); In yolo V3 all the short cut layers have linear activation so we can comment this line. 
 
     int divider = pow(2, max_ipos - l.opos);
     for (i_q = 0; i_q < l.outputs; ++i_q){
-        l.output[i_q] = xilinx_quantizer(l.output[i_q], divider);
+        l.output[i_q] = xilinx_quantizer(near_output[i_q], divider);
     }
     int sum_act = sum_f(l.output, l.outputs);
 }

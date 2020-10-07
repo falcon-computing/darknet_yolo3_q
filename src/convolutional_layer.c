@@ -192,10 +192,10 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
     l.pad = padding;
     l.batch_normalize = batch_normalize;
 
-    l.weights = calloc(c/groups*n*size*size, sizeof(float));
+    l.weights = calloc(c/groups*n*size*size, sizeof(int8_t));
     l.weight_updates = calloc(c/groups*n*size*size, sizeof(float));
 
-    l.biases = calloc(n, sizeof(float));
+    l.biases = calloc(n, sizeof(int8_t));
     l.bias_updates = calloc(n, sizeof(float));
 
     l.nweights = c/groups*n*size*size;
@@ -215,7 +215,7 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
     l.outputs = l.out_h * l.out_w * l.out_c;
     l.inputs = l.w * l.h * l.c;
 
-    l.output = calloc(l.batch*l.outputs, sizeof(float));
+    l.output = calloc(l.batch*l.outputs, sizeof(int8_t));
     l.delta  = calloc(l.batch*l.outputs, sizeof(float));
 
     l.forward = forward_convolutional_layer;
@@ -461,7 +461,7 @@ void forward_convolutional_layer(convolutional_layer l, network net)
 
     int i, j;
     
-    int* temp_sum = calloc(l.outputs, sizeof(int));
+    int32_t* temp_sum = calloc(l.outputs, sizeof(int32_t));
     
     //fill_cpu(l.outputs*l.batch, 0, l.output, 1);
 
@@ -472,8 +472,8 @@ void forward_convolutional_layer(convolutional_layer l, network net)
         net.input = l.binary_input;
     }
 
-    long weight_coef = pow(2, l.wpos);
-    long bias_coef = pow(2, l.wpos + l.ipos1);  // (l.wpos + l.ipos1) is always bigger than bpos
+    //long weight_coef = pow(2, l.wpos);
+    //long bias_coef = pow(2, l.wpos + l.ipos1);  // (l.wpos + l.ipos1) is always bigger than bpos
     //long out_coef = pow(2, l.opos);
 
 
@@ -482,24 +482,20 @@ void forward_convolutional_layer(convolutional_layer l, network net)
     int n = l.out_w*l.out_h;
     for(i = 0; i < l.batch; ++i){
         for(j = 0; j < l.groups; ++j){
-            float *a = l.weights + j*l.nweights/l.groups;
-            float *a_q = calloc(l.c * l.n*l.size*l.size, sizeof(float));  // we assume groups is always 1. Eventhough types should be int, we keep them in float for faster development, but they actually storing int numbers
-            int i_q;
-            for (i_q = 0; i_q < l.c * l.n*l.size*l.size; ++i_q)
-                a_q[i_q] = weight_coef *  a[i_q]; // we do not round here bc this should result an integer without rounding
-            int sum_wq = sum_f(a_q, l.c * l.n*l.size*l.size);   
-            float *b = net.workspace;  // we keep b in float but it is actually soring int8. I dod not want to mess around so I keep it in float
+            int8_t *a = l.weights + j*l.nweights/l.groups;
+            //int sum_wq = sum_f(a_q, l.c * l.n*l.size*l.size);   
+            int8_t *b = net.workspace;  // we keep b in float but it is actually soring int8. I dod not want to mess around so I keep it in float
             //float *c = l.output + (i*l.groups + j)*n*m;
-            int *c_q = temp_sum + (i*l.groups + j)*n*m; 
-            float *im = net.input + (i*l.groups + j)*l.c/l.groups*l.h*l.w;
+            int32_t *c_q = temp_sum + (i*l.groups + j)*n*m; 
+            int8_t *im = net.input + (i*l.groups + j)*l.c/l.groups*l.h*l.w;
 
             if (l.size == 1) {
                 b = im;
             } else {
                 im2col_cpu(im, l.c/l.groups, l.h, l.w, l.size, l.stride, l.pad, b);
             }   
-            int sum_bq = sum_f(net.input, l.inputs);
-            gemm_q(0,0,m,n,k,1,a_q,k,b,n,1,c_q,n);
+            //int sum_bq = sum_f(net.input, l.inputs);
+            gemm_q(0,0,m,n,k,1,a,k,b,n,1,c_q,n);
             int64_t sum_conv = sum_i(c_q, l.outputs);
             int xl =0;
         }
@@ -509,12 +505,11 @@ void forward_convolutional_layer(convolutional_layer l, network net)
     if(l.batch_normalize){
         forward_batchnorm_layer(l, net);
     } else {
-        int* bias_q = calloc(l.n, sizeof(float));
+        int32_t* bias_q = calloc(l.n, sizeof(int32_t));
         int i_q;
         for (i_q = 0; i_q < l.n; ++i_q)
-            bias_q[i_q] = l.biases[i_q] * bias_coef;
+            bias_q[i_q] = l.biases[i_q] * pow(2, l.wpos + l.ipos1 - l.bpos);  // we will precompute this bias adjustment later
         add_bias_q(temp_sum, bias_q, l.batch, l.n, l.out_h*l.out_w);
-
     }
     int64_t sum_conv = sum_i(temp_sum, l.outputs);
 
@@ -528,9 +523,9 @@ void forward_convolutional_layer(convolutional_layer l, network net)
     //activate_array(l.output, l.outputs*l.batch, l.activation);
     if (l.activation == LEAKY){
         for(i_q = 0; i_q < l.outputs; ++i_q){
-            if (temp_sum[i_q] < 0){
+            if (l.output[i_q] < 0){
                 //double curr_activation = temp_sum[i_q];
-                double curr_activation = l.output[i_q];
+                int32_t curr_activation = l.output[i_q];
                 curr_activation = curr_activation * 104;
                 //l.output[i_q] = xilinx_quantizer(curr_activation, 1024 * div_val);
                 l.output[i_q] = xilinx_quantizer(curr_activation, 1024);
@@ -551,7 +546,7 @@ void forward_convolutional_layer(convolutional_layer l, network net)
     // }
     
     if(l.binary || l.xnor) swap_binary(&l);
-    int sum_act = sum_f(l.output, l.outputs);
+    int sum_act = sum_i8(l.output, l.outputs);
 }
 
 void backward_convolutional_layer(convolutional_layer l, network net)
