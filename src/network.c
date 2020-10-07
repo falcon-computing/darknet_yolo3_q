@@ -501,8 +501,8 @@ float *network_predict(network *net, float *input)
     int i_q;
     for (i_q = 0; i_q < net->inputs; ++i_q)
     {
-        //net->input[i_q] = xilinx_quantizer(round(input[i_q] * 64), 1);
-        net->input[i_q] = round(input[i_q] * 64);
+        net->input[i_q] = xilinx_quantizer_shift(round(input[i_q] * 64), 0);
+        //net->input[i_q] = round(input[i_q] * 64);
     }
     int sum_aq = sum_f(net->input, net->inputs);
     

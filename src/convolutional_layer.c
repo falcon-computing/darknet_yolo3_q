@@ -532,10 +532,10 @@ void forward_convolutional_layer(convolutional_layer l, network net)
                 //l.output[i_q] = xilinx_quantizer(curr_activation, 1024);
                 l.output[i_q] = xilinx_quantizer_shift(curr_activation, 10);
             }
-            // else{
-            //     double curr_activation = temp_sum[i_q];
-            //     l.output[i_q] = xilinx_quantizer(curr_activation,div_val);
-            // }
+            else{
+               double curr_activation = temp_sum[i_q];
+                 l.output[i_q] = xilinx_quantizer_shift(curr_activation,0);
+             }
         }
 
     }
