@@ -69,18 +69,18 @@ void forward_shortcut_layer(const layer l, network net)
     int32_t* far_output = calloc(net.layers[l.index].outputs, sizeof(int32_t));
     int max_ipos = (l.ipos1 > l.ipos2) ? l.ipos1 : l.ipos2;
 
-    int32_t near_multiplier = pow(2, max_ipos - l.ipos1);
+    //int32_t near_multiplier = pow(2, max_ipos - l.ipos1);
     int i_q;
     for (i_q = 0; i_q < l.outputs; ++i_q)
-        near_output[i_q] = near_multiplier * net.input[i_q];
+        near_output[i_q] = net.input[i_q] << (max_ipos - l.ipos1);
         
     //copy_cpu(l.outputs*l.batch, near_output, 1, l.output, 1);  we need to put result to the output after adjusting the range with output opos
 
     int sum_near = sum_f(l.output, l.outputs);
 
-    int far_multiplier = pow(2, max_ipos - l.ipos2);
+    //int far_multiplier = pow(2, max_ipos - l.ipos2);
     for (i_q = 0; i_q < net.layers[l.index].outputs; ++i_q)
-        far_output[i_q] = far_multiplier * net.layers[l.index].output[i_q];
+        far_output[i_q] = net.layers[l.index].output[i_q] << (max_ipos - l.ipos2);
 
     int sum_far = sum_f(far_output, l.outputs);
 
