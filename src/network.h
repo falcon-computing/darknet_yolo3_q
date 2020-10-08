@@ -25,5 +25,9 @@ void print_network(network *net);
 int resize_network(network *net, int w, int h);
 void calc_network_cost(network *net);
 
+void write_data_file_int8(int layer, int8_t *value, int size);
+void write_data_file_float(int layer, float *value, int size); 
+
+
 #endif
 

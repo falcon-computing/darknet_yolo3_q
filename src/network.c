@@ -32,6 +32,45 @@
 #include "parser.h"
 #include "data.h"
 
+void write_data_file_float(int layer, float * value, int size) {
+    char file_name[] = "output_layerXXX.dat";
+    file_name[12] = layer/100 + '0';
+    file_name[13] = (layer%100)/10 + '0';
+    file_name[14] = (layer%100)%10 + '0';
+    printf("Output data name = %s\n", file_name);
+    // write file
+    FILE* fp2= fopen(file_name, "w+");
+    if (NULL == fp2) {
+        fclose(fp2);
+        //exit(1);
+    }
+    int i = 0;
+    for(i=0; i<size; i++) {
+        fprintf(fp2, "%f\n", value[i]);
+    }
+    fclose(fp2);
+    //exit(1);
+}
+void write_data_file_int8(int layer, int8_t *value, int size) {
+    char file_name[] = "output_layerXXX.dat";
+    file_name[12] = layer/100 + '0';
+    file_name[13] = (layer%100)/10 + '0';
+    file_name[14] = (layer%100)%10 + '0';
+    printf("Output data name = %s\n", file_name);
+    // write file
+    FILE* fp2= fopen(file_name, "w+");
+    if (NULL == fp2) {
+        fclose(fp2);
+        //exit(1);
+    }
+    int i = 0;
+    for(i=0; i<size; i++) {
+        fprintf(fp2, "%f\n", value[i]);
+    }
+    fclose(fp2);
+    //exit(1);
+}
+
 load_args get_base_args(network *net)
 {
     load_args args = {0};

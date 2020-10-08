@@ -10,7 +10,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/darknet",
-            "args": ["detect", "/Users/reza/Github/falcon_yolo_quantizer/model/gen/Yolov3_q.cfg", "/Users/reza/Github/falcon_yolo_quantizer/model/gen/Yolov3_q.weights", "/Users/reza/Downloads/Dataset/VOC/test/VOCdevkit2/VOC2007/JPEGImages/000001.jpg", "-thresh", 0.35],
+            "args": ["detect", "/Users/reza/Github/falcon_yolo_quantizer/model/gen/Yolov3_q.cfg", "/Users/reza/Github/falcon_yolo_quantizer/model/gen/Yolov3_q.weights", "/Users/reza/Downloads/Dataset/VOC/test/VOCdevkit2/VOC2007/JPEGImages/000401.jpg", "-thresh", 0.01],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
