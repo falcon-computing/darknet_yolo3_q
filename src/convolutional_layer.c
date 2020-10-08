@@ -539,13 +539,12 @@ void forward_convolutional_layer(convolutional_layer l, network net)
         }
 
     }
-    else if (l.activation == LINEAR)
-    {
-        for(i_q = 0; i_q < l.outputs; ++i_q){
-            double curr_activation = temp_sum[i_q];
-            l.output[i_q] = xilinx_quantizer_shift(curr_activation, 0);
-        }
-    }
+    // else if (l.activation == LINEAR)
+    // {
+    //     for(i_q = 0; i_q < l.outputs; ++i_q){
+    //         l.output[i_q] = xilinx_quantizer_shift(l.output[i_q], 0);  // this is unnecessary as we have already done this linear activation
+    //     }
+    // }
     
     if(l.binary || l.xnor) swap_binary(&l);
     int sum_act = sum_i8(l.output, l.outputs);
