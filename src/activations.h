@@ -110,13 +110,13 @@ static inline int8_t xilinx_quantizer_shift(int32_t input, int shift_count)
     //return xilinx_quantizer(input, pow(2, shift_count));
     int32_t ret_val;
     if (shift_count > 0){
-        int right_of_shift = (shift_count >= 2)? (1 << (shift_count - 2)): 1;
+        int right_of_shift = 1 << (shift_count - 1);
         if (input & right_of_shift){
             
             ret_val = (input >> shift_count) + 1;
         }
         else{
-            ret_val = (input >> shift_count);
+            ret_val = input  >> shift_count;
         }
     }
     else{
