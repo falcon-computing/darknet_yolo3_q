@@ -129,6 +129,20 @@ static int entry_index(layer l, int batch, int location, int entry)
     return batch*l.outputs + n*l.w*l.h*(4+l.classes+1) + entry*l.w*l.h + loc;
 }
 
+void yolo_layer_q(const layer l, network net, int8_t *input) {
+    int i,j,b,t,n,i_q;
+    for(i_q = 0; i_q < l.outputs;  ++ i_q) // We assume batch is always one
+        l.yolo_out[i_q] = input[i_q] / 4.0;
+    for (b = 0; b < l.batch; ++b){
+        for(n = 0; n < l.n; ++n){
+            int index = entry_index(l, b, n*l.w*l.h, 0);
+            activate_array(l.yolo_out + index, 2*l.w*l.h, LOGISTIC);
+            index = entry_index(l, b, n*l.w*l.h, 4);
+            activate_array(l.yolo_out + index, (1+l.classes)*l.w*l.h, LOGISTIC);
+        }
+    }
+}
+
 void forward_yolo_layer(const layer l, network net)
 {
     int i,j,b,t,n;

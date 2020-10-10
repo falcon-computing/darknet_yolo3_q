@@ -3,6 +3,8 @@ CUDNN=0
 OPENCV=0
 OPENMP=0
 DEBUG=0
+FPGA=1
+DEBUG_CPU=1
 
 ARCH= -gencode arch=compute_30,code=sm_30 \
       -gencode arch=compute_35,code=sm_35 \
@@ -16,6 +18,11 @@ ARCH= -gencode arch=compute_30,code=sm_30 \
 VPATH=./src/:./examples
 SLIB=libdarknet.so
 ALIB=libdarknet.a
+ifeq ($(FPGA), 1) 
+OLIB=-L./ -Wl,-rpath=./ -lkernel
+else
+OLIB=
+endif
 EXEC=darknet
 OBJDIR=./obj/
 
@@ -25,8 +32,8 @@ NVCC=nvcc
 AR=ar
 ARFLAGS=rcs
 OPTS=-Ofast
-LDFLAGS= -lm -pthread 
-COMMON= -Iinclude/ -Isrc/
+LDFLAGS= -lm -pthread  -lxilinxopencl -L $(XILINX_XRT)/lib
+COMMON= -Iinclude/ -Isrc/ -I $(XILINX_XRT)/include
 CFLAGS=-Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC
 
 ifeq ($(OPENMP), 1) 
@@ -44,6 +51,82 @@ COMMON+= -DOPENCV
 CFLAGS+= -DOPENCV
 LDFLAGS+= `pkg-config --libs opencv` -lstdc++
 COMMON+= `pkg-config --cflags opencv` 
+endif
+
+ifeq ($(FPGA), 1) 
+COMMON+= -DFPGA  -O3 -Wno-deprecated-declarations
+CFLAGS+= -DFPGA 
+LDFLAGS+= -L. -lkernel
+
+VENDOR=XILINX
+#DEVICE=vitis::zcu102_base
+#DEVICE=sdaccel::xilinx_u250_xdma_201830_2
+DEVICE=vitis::xilinx_u250_xdma_201830_2
+
+KERNEL_NAME=kernel_top
+KERNEL_SRC_FILES= ./hw/top_kernel_yolov3_int8_16x16.cpp 
+
+EXE=yolov3_tiny__app
+ACC_EXE=$(EXE)_acc
+EXE_ARGS= detect cfg/yolov3.cfg yolov3.weights data/dog.jpg
+
+ATTRIBUTE  = -funsafe-math-optimizations
+ATTRIBUTE += --attribute coarse_grained_pipeline=off
+ATTRIBUTE += --attribute memory_burst=off
+ATTRIBUTE += --attribute bus_bitwidth=off
+ATTRIBUTE += --attribute memory_coalescing=off
+#ATTRIBUTE += --attribute reduction_general=off
+#ATTRIBUTE += --attribute reduction_opt=off
+#ATTRIBUTE += --attribute line_buffer=off
+#ATTRIBUTE += --attribute structural_func_inline=off
+#ATTRIBUTE += --attribute function_inline=off
+#ATTRIBUTE += --attribute auto_func_inline=off
+#ATTRIBUTE += --attribute explicit_bundle=on
+ATTRIBUTE += --vendor-options "-g"
+ATTRIBUTE += --attribute stream_prefetch=off
+
+N16_LINE:=104
+ONCHIP_SIZE:=13
+N16_LINE_ATT = -DN16_LINE=$(N16_LINE)
+ONCHIP_SIZE_ATT = -DONCHIP_SIZE=$(ONCHIP_SIZE)
+
+CMP_OPT=-d11 -DFPGA   $(ATTRIBUTE) $(ONCHIP_SIZE_ATT) $(N16_LINE_ATT)
+LNK_OPT=-d11
+
+ifeq ($(DEBUG_CPU), 1) 
+
+DEBUG_LAYER = 1
+ifeq ($(DEBUG_LAYER), 1) 
+COMMON+= -DDEBUG_CPU
+CFLAGS+= -DDEBUG_CPU
+endif
+
+DEBUG_DATA_SIM = 0
+ifeq ($(DEBUG_DATA_SIM), 1)
+COMMON+= -DDEBUG_SIM
+CFLAGS+= -DDEBUG_SIM
+endif
+else
+COMMON+= -DCPU
+CFLAGS+= -DCPU 
+endif
+
+
+ifeq ($(DEBUG_FPGA), 1) 
+CMP_OPT+= -DDSP_PACK
+#CMP_OPT+= -DDEBUG_BURST
+#CMP_OPT+= -DDEBUG_WEIGHT
+#CMP_OPT+= -DDEBUG_CONV
+#CMP_OPT+= -DDEBUG_BIAS
+#CMP_OPT+= -DDEBUG_SHORTCUT
+#CMP_OPT+= -DDEBUG_UPSAMPLE
+#CMP_OPT+= -DDEBUG_DATAOUT
+endif
+
+CXX=xcpp
+CXX_INC_DIRS= $(COMMON)
+CXX_FLAGS += $(LDFLAGS)
+
 endif
 
 ifeq ($(GPU), 1) 
@@ -74,7 +157,8 @@ all: obj backup results $(SLIB) $(ALIB) $(EXEC)
 
 
 $(EXEC): $(EXECOBJ) $(ALIB)
-	$(CC) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(ALIB)
+	$(CC) -fpermissive -std=c++11 $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(ALIB) $(OLIB)
+#	xcpp -fpermissive -std=c++11 $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(ALIB) $(OLIB)
 
 $(ALIB): $(OBJS)
 	$(AR) $(ARFLAGS) $@ $^
@@ -103,3 +187,47 @@ results:
 clean:
 	rm -rf $(OBJS) $(SLIB) $(ALIB) $(EXEC) $(EXECOBJ) $(OBJDIR)/*
 
+acc:
+	python3 python/parse_cfg.py --cfg cfg/yolov3.cfg --N16xh $(N16_LINE)
+	merlincc -c $(KERNEL_SRC_FILES) -DXILINX -o $(KERNEL_NAME) $(CMP_OPT) --platform=$(DEVICE)
+runsim:
+	merlincc $(KERNEL_NAME).mco -march=sw_emu -D MCC_SIM -o kernel_top $(LNK_OPT) --platform=$(DEVICE)
+
+estimate:
+	merlincc $(KERNEL_NAME).mco --report=estimate -d11 --platform=$(DEVICE)
+
+runhw:
+	merlincc $(KERNEL_NAME).mco -march=hw_emu -D MCC_SIM -o kernel_top $(LNK_OPT) --platform=$(DEVICE)
+	XCL_EMULATION_MODE=hw_emu ./$(EXEC) $(EXE_ARGS)
+bitgen:
+	merlincc $(KERNEL_NAME).mco -o kernel_top_hw.xclbin -d11 --platform=$(DEVICE)
+
+libgen:
+	rm -rf lib_gen/bin/libkernel.so;
+	cd lib_gen; make lib_gen; cd -;
+	cp lib_gen/bin/libkernel.so .;
+
+runall:
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 
+
+runtest:
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) $(START) $(END) 0 16
+
+run0:
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 0 0 0 16
+
+run59:
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 59 59 0 16
+
+testall:
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 56 56 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 58 58 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 59 59 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 43 43 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 63 63 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 64 64 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 26 26 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 69 69 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 70 70 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 0   0 0 16; \
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 1   1 0 16; 

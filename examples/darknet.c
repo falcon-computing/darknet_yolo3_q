@@ -3,9 +3,10 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+extern void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen, int *test_cfg);
 
 extern void predict_classifier(char *datacfg, char *cfgfile, char *weightfile, char *filename, int top);
-extern void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen);
+//extern void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen);
 extern void run_yolo(int argc, char **argv);
 extern void run_detector(int argc, char **argv);
 extern void run_coco(int argc, char **argv);
@@ -434,7 +435,19 @@ int main(int argc, char **argv)
         char *filename = (argc > 4) ? argv[4]: 0;
         char *outfile = find_char_arg(argc, argv, "-out", 0);
         int fullscreen = find_arg(argc, argv, "-fullscreen");
-        test_detector("cfg/voc.data", argv[2], argv[3], filename, thresh, .5, outfile, fullscreen);
+        int test_cfg[10];
+        test_cfg[0] = 0;
+        test_cfg[1] = 74;
+        test_cfg[2] = 0;
+        test_cfg[3] = 16;
+        if(argc > 8) {
+            test_cfg[0] = atoi(argv[5]);
+            test_cfg[1] = atoi(argv[6]);
+            test_cfg[2] = atoi(argv[7]);
+            test_cfg[3] = atoi(argv[8]);
+            printf("get input data: %d, %d, %d, %d", test_cfg[0], test_cfg[1], test_cfg[2], test_cfg[3]);
+        }
+        test_detector("cfg/voc.data", argv[2], argv[3], filename, .3, .3, outfile, fullscreen, test_cfg);
     } else if (0 == strcmp(argv[1], "cifar")){
         run_cifar(argc, argv);
     } else if (0 == strcmp(argv[1], "go")){
