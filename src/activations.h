@@ -114,9 +114,11 @@ static inline int8_t xilinx_quantizer_shift(int32_t input, int shift_count)
         if (input & right_of_shift){
             
             ret_val = (input >> shift_count) + 1;
+            //printf("input = %d, shift_count_1=%d, ret_val=%d,", input, shift_count, ret_val);
         }
         else{
             ret_val = input  >> shift_count;
+            //printf("input = %d, shift_count_0=%d, ret_val=%d,", input, shift_count, ret_val);
         }
     }
     else{

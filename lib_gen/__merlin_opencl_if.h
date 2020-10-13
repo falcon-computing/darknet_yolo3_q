@@ -17,6 +17,7 @@
 //#include "config_4x4.h"
 //#include "config.h"
 typedef int8_t DATA_T;
+typedef int32_t BIAS_DT;
 
 #ifdef __cplusplus
 extern "C" {

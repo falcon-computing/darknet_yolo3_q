@@ -34,10 +34,13 @@
 #include "data.h"
 #define MAX_LINE 100
 
-void get_blas_data(layer l, int32_t * blas_array) {
+void get_bias_data(layer l, int32_t * bias_array) {
     int i = 0;
     for(i = 0; i < l.n; i++) {
-        blas_array[i] = l.biases[i];
+        bias_array[i] = l.biases[i];
+    }
+    for(i = l.n; i < (l.n + 15)/16*16; i++) {
+        bias_array[i] = 0;
     }
 }
 
@@ -329,12 +332,12 @@ void forward_network_fpga(network *netp, int * test_cfg)
     DATA_T * yolo2_pre = malloc(sizeof(DATA_T) * config_list_all[66][2][8] * config_list_all[66][2][6] * config_list_all[66][2][7]);
     DATA_T * yolo3_pre = malloc(sizeof(DATA_T) * config_list_all[74][2][8] * config_list_all[74][2][6] * config_list_all[74][2][7]);
 
-    //get blas data
+    //get bias data
     int32_t bias_in[OUTPUT_LAYER_NUM][1024];
     int l_cnt = 0;
     for(l_cnt = 0; l_cnt < OUTPUT_LAYER_NUM; l_cnt++){
         net.index = index_conv[l_cnt];
-        get_blas_data(net.layers[index_conv[l_cnt]], bias_in[l_cnt]);
+        get_bias_data(net.layers[index_conv[l_cnt]], bias_in[l_cnt]);
         #ifdef DEBUG_SIM
         int i;
         for(i = 0; i < net.layers[index_conv[l_cnt]].n; i++) {
@@ -342,6 +345,10 @@ void forward_network_fpga(network *netp, int * test_cfg)
         }
         #endif
     }
+    //int i;
+    //for(i = 0; i < 16; i++) {
+    //    printf("bias_array[%d] = %d\n",i, bias_in[59][i]);
+    //}
     //printf("load bias finished\n");
     
     int m,p,q,r;
@@ -394,11 +401,9 @@ void forward_network_fpga(network *netp, int * test_cfg)
         weight_size = config_format[0]* config_format[1] *config_format[2];
         weights_in[l_cnt] = (DATA_T*)malloc(weight_size * sizeof(DATA_T));
         #ifdef DEBUG_SIM
-        int l_c = net.layers[net.index].c;
-        int l_n = net.layers[net.index].n;
-        int l_h = net.layers[net.index].h;
-        int l_w = net.layers[net.index].w;
-        int l_size = net.layers[net.index].size;
+        int l_c = config_list_all[l_cnt][0][3];
+        int l_n = config_list_all[l_cnt][0][7];
+        int l_size = config_list_all[l_cnt][0][0];
         for(m = 0; m < l_n; m++){
             for(p = 0; p < l_c; p++){
                 for(q = 0; q < l_size; q++){
@@ -424,7 +429,9 @@ void forward_network_fpga(network *netp, int * test_cfg)
     //=======================================================
     //
     printf("loading weight\n");
+    #if FPGA == 1
     __merlin_load_weight(weights_in, bias_in);
+    #endif
     #ifdef DEBUG_CPU
     int debug_config[10];
     debug_config[0] = debug_layer;//new layer
@@ -477,29 +484,35 @@ void forward_network_fpga(network *netp, int * test_cfg)
     struct timeval tv_start, tv_end;
     double exe_time;
     gettimeofday(&tv_start, NULL);
+    #if FPGA == 1
     #ifdef DEBUG_CPU
     __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_pre, yolo2_pre, yolo3_pre, debug_config);
-    exit(1);
+    printf("finish opencl kernel\n");
+    //exit(1);
     #else
     __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_pre, yolo2_pre, yolo3_pre, 0);
     #endif // DEBUG_CPU
+    #endif
     gettimeofday(&tv_end, NULL);
     exe_time = (tv_end.tv_sec - tv_start.tv_sec) * 1000.0 + (tv_end.tv_usec - tv_start.tv_usec)/1000.0;                
     printf("E2E time %f \n",exe_time);
     { //yolo1
         layer l = net.layers[82];
         yolo_layer_q(l, net, yolo1_pre);
-        write_data_file_float(82, l.output, l.outputs);
+        write_data_file_float(82, l.yolo_out, l.outputs);
+        printf("finish yolo-1\n");
     }
     { //yolo2
         layer l = net.layers[94];
         yolo_layer_q(l, net, yolo2_pre);
-        write_data_file_float(94, l.output, l.outputs);
+        write_data_file_float(94, l.yolo_out, l.outputs);
+        printf("finish yolo-2\n");
     }
     { //yolo3
         layer l = net.layers[106];
         yolo_layer_q(l, net, yolo3_pre);
-        write_data_file_float(106, l.output, l.outputs);
+        write_data_file_float(106, l.yolo_out, l.outputs);
+        printf("finish yolo-3\n");
     }
     calc_network_cost(netp);
 }
@@ -790,7 +803,7 @@ void top_predictions(network *net, int k, int *index)
 
 float *network_predict_fpga(network *net, float *input, int * test_cfg)
 {
-    #ifdef FPGA
+    #if FPGA == 1
     __merlin_init("kernel_top.xclbin");
     #endif
     network orig = *net;
@@ -806,10 +819,12 @@ float *network_predict_fpga(network *net, float *input, int * test_cfg)
     net->truth = 0;
     net->train = 0;
     net->delta = 0;
+    #if FPGA == 1
     forward_network_fpga(net, test_cfg);
+    #endif
     float *out = net->output;
     *net = orig;
-    #ifdef FPGA
+    #if FPGA == 1
     __merlin_release();
     #endif
     return out;

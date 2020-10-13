@@ -4,7 +4,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include "config_16x16_q.h"
+#include "src/config_16x16_q.h"
 
 typedef ap_int< ORG_DATA_WIDTH > IMAGE_DT;
 typedef float BIAS_DT;
@@ -20,22 +20,35 @@ inline To Reinterpret(const From& val){
     return reinterpret_cast<const To&>(val);
 }
 
-
-CONV_DT max_abs(CONV_DT src, CONV_DT max_val)
+IMAGE_DT xilinx_quantizer_shift(IMAGE_4DT input, int shift_count)
 {
-    if(src > max_val)
-        src = max_val;
-    else if(src < -max_val)
-        src = -max_val;
-    return src;
+    IMAGE_4DT ret_val;
+    if (shift_count > 0){
+        int tmp = shift_count - 1;
+        int right_of_shift = 1 << tmp;
+        if (input & right_of_shift){
+            
+            ret_val = (input >> shift_count) + 1;
+        }
+        else{
+            ret_val = (input >> shift_count);
+        }
+    }
+    else{
+        ret_val =  input;
+    }
+    if(ret_val > 127)
+        ret_val = 127;
+    else if(ret_val < -128)
+        ret_val = -128;
+    return ret_val;
 }
-
 
 void stream_in_weights(
     ap_int< WIDE_BUS_WIDTH > *in_weights,
     hls::stream< ap_int< WIDE_BUS_WIDTH > > & fifo_weights_3x3,
     hls::stream< ap_int< WIDE_BUS_WIDTH > > & fifo_weights_1x1,
-    hls::stream< ap_int< 32*4 > > &fifo_bias,
+    hls::stream< ap_int< WIDE_BUS_WIDTH > > & fifo_bias,
     const int config_list[32]) 
 {
     #pragma HLS inline off
@@ -61,35 +74,20 @@ void stream_in_weights(
     int burst_length_single = PARALLEL_FILTER * size * size * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH;
     //burst_length_filter = in_c * size * size * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH;
     ap_int< WIDE_BUS_WIDTH > buf_in_weights[1152];
-    ap_int< WIDE_BUS_WIDTH > buf_in_bias[256];
+    ap_int< WIDE_BUS_WIDTH > buf_in_bias[64];
     //weights data input conv 3x3
-    memcpy((void*)buf_in_bias, (void*)&in_weights[bias_offset], sizeof(ap_int< WIDE_BUS_WIDTH >) * n/4);
+    memcpy((void*)buf_in_bias, (void*)&in_weights[bias_offset], sizeof(ap_int< WIDE_BUS_WIDTH >) * 64);
     for (int k = 0; k < trans_cnt; k++) {
         #pragma HLS loop_tripcount min=2 max=2
-        for (int i = 0; i < 4 * PARALLEL_FILTER * 32 / WIDE_BUS_WIDTH; i++) {
-            #pragma HLS pipeline
-            #pragma HLS loop_tripcount min=2 max=2
-            //printf("k:%d/%d, i:%d/%d\n",k + 1,trans_cnt,i + 1,4 * 16 * 32 / WIDE_BUS_WIDTH);
-            //ap_int< WIDE_BUS_WIDTH > buf_input = in_weights[k * 4 * PARALLEL_FILTER * 32 / WIDE_BUS_WIDTH + i + bias_offset];
-            ap_int< WIDE_BUS_WIDTH > buf_input = buf_in_bias[k * 4 * PARALLEL_FILTER * 32 / WIDE_BUS_WIDTH + i];
-            ap_int< 32*4 > tmp[WIDE_BUS_WIDTH/32/4];
-            #if WIDE_BUS_WIDTH/32/4 == 4
-            tmp[0] = buf_input(((0 + 1) * 32 * 4 - 1), (0 * 32 * 4));
-            fifo_bias . write(tmp[0]);
-            tmp[1] = buf_input(((1 + 1) * 32 * 4 - 1), (1 * 32 * 4));
-            fifo_bias . write(tmp[1]);
-            tmp[2] = buf_input(((2 + 1) * 32 * 4 - 1), (2 * 32 * 4));
-            fifo_bias . write(tmp[2]);
-            tmp[3] = buf_input(((3 + 1) * 32 * 4 - 1), (3 * 32 * 4));
-            fifo_bias . write(tmp[3]);
-            #elif WIDE_BUS_WIDTH/32/4 == 2
-            tmp[0] = buf_input(((0 + 1) * 32 * 4 - 1), (0 * 32 * 4));
-            fifo_bias . write(tmp[0]);
-            tmp[1] = buf_input(((1 + 1) * 32 * 4 - 1), (1 * 32 * 4));
-            fifo_bias . write(tmp[1]);
-            #endif
+        ap_int< WIDE_BUS_WIDTH > bias_tmp = buf_in_bias[k];
+        fifo_bias . write(bias_tmp);
+#ifdef DEBUG_WEIGHT
+        for (int p = 0; p < 16; p++) 
+        {
+            IMAGE_4DT bias = bias_tmp(((p + 1) * 32 - 1),(p * 32));
+            printf("load_biases[%d]:%d\n", p, (bias . to_int()));
         }
-        //printf("\n");
+#endif
         memcpy((void*)buf_in_weights, (void*)&in_weights[k * burst_length_filter + w_offset], sizeof(ap_int< WIDE_BUS_WIDTH >) * burst_length_filter);
         for (int z = 0; z < in_h_13; z++) {
             #pragma HLS loop_tripcount min = 32 max =32
@@ -547,7 +545,7 @@ void conv_1x1_weights(
 void conv_1x1_stream(
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_data_in, 
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &fifo_weights, 
-    hls::stream< CONV_DT > stream_data_out[PARALLEL_FILTER], 
+    hls::stream< CONV_MDT > stream_data_out[PARALLEL_FILTER], 
     const int config_list[32]) 
 {
     int in_c = config_list[3];
@@ -586,16 +584,13 @@ void conv_1x1_stream(
                             if(out_w != 16 || index < 13) {
                                 #ifdef DSP_PACK
                                 for (int p = 0; p < PARALLEL_FILTER / 2; p++) {
-                                    CONV_MDT tmp0 = sum_buffer[p][wh * FACTORS + f](31,0);
-                                    CONV_MDT tmp1 = sum_buffer[p][wh * FACTORS + f](63,32);
-                                    CONV_DT buf0_output = max_abs(tmp0/R_MULT, (256 * 128 - 1));
-                                    CONV_DT buf1_output = max_abs(tmp1/R_MULT, (256 * 128 - 1));
+                                    CONV_MDT buf0_output = sum_buffer[p][wh * FACTORS + f](31,0);
+                                    CONV_MDT buf1_output = sum_buffer[p][wh * FACTORS + f](63,32);
                                     stream_data_out[p*2+0] . write(buf0_output);
                                     stream_data_out[p*2+1] . write(buf1_output);
                                 #else
                                 for (int p = 0; p < PARALLEL_FILTER; p++) {
-                                    CONV_MDT tmp0 = sum_buffer[p][wh * FACTORS + f](31,0);
-                                    CONV_DT buf0_output = max_abs(tmp0/R_MULT, (256 * 128 - 1));
+                                    CONV_MDT buf0_output = sum_buffer[p][wh * FACTORS + f](31,0);
                                     stream_data_out[p] . write(buf0_output);
                                 #endif
 #ifdef DEBUG_BURST
@@ -651,7 +646,10 @@ void burst_in_weights(
                 #endif
                 weights_in[p][i * FACTORS + f] = tmp;
 #ifdef DEBUG_WEIGHT
-                printf("load_weight[p%d][%3d]=%d ", p, i * FACTORS + f,(weights_in[p][i * FACTORS + f] . to_int()));
+                IMAGE_DT a1 = tmp( 7,0);
+                IMAGE_DT a2 = tmp(15,8);
+                printf("load_weight[p%d][%3d]=%d ", p*2+0, i * FACTORS + f,(a1 . to_int()));
+                printf("load_weight[p%d][%3d]=%d ", p*2+1, i * FACTORS + f,(a2 . to_int()));
 #endif
             }
 #ifdef DEBUG_WEIGHT
@@ -1035,7 +1033,6 @@ void shift_reg(
        }
        printf("\n");
     }
-    printf("count:%3d %3d\n", w, (in_w + pad - stride + 1)/stride);
 #endif
 }
 
@@ -1104,7 +1101,7 @@ void adder_out(
     #else
     hls::stream< IMAGE_4DT > stream_data_in[PARALLEL_FILTER], 
     #endif
-    hls::stream< CONV_DT > stream_data_out[PARALLEL_FILTER], 
+    hls::stream< CONV_MDT > stream_data_out[PARALLEL_FILTER], 
     int z, int s, int in_w, int in_c, int size, int stride, int pad, int new_h,
     int h_col, int w_col)
 {
@@ -1152,24 +1149,19 @@ void adder_out(
             }
             if (s == in_c / TILING_IMAGE - 1) {
                 #ifdef DSP_PACK
-                CONV_MDT sum0 = conv_sum[p*2+0][i];
-                CONV_MDT sum1 = conv_sum[p*2+1][i];
-                CONV_DT buf0_output = max_abs(sum0/R_MULT, (256 * 128 - 1));
-                CONV_DT buf1_output = max_abs(sum1/R_MULT, (256 * 128 - 1));
+                CONV_MDT buf0_output = conv_sum[p*2+0][i];
+                CONV_MDT buf1_output = conv_sum[p*2+1][i];
                 stream_data_out[p*2+0] . write(buf0_output);
                 stream_data_out[p*2+1] . write(buf1_output);
                 #else
-                CONV_MDT sum0 = conv_sum[p][i];
-                CONV_DT buf0_output = max_abs(sum0/R_MULT, (256 * 128 - 1));
+                CONV_MDT buf0_output = conv_sum[p][i];
                 stream_data_out[p] . write(buf0_output);
                 #endif
 #ifdef DEBUG_CONV
                 if(p == 0){
                     #ifdef DSP_PACK
-                    printf("(sum0:%d, sum1:%d) ",(sum0 . to_int()),(sum1 . to_int()));
                     printf("conv_sum[%3d][%3d] = (%3d, %3d) ", i / w_col, i % w_col, (buf0_output . to_int()), (buf1_output . to_int()));
                     #else
-                    printf("(sum0:%d) ",(sum0 . to_int()));
                     printf("conv_sum[%3d][%3d] = %3d ", i / w_col, i % w_col, (buf0_output . to_int()));
                     #endif
                     if (i % w_col == w_col - 1) {
@@ -1200,7 +1192,7 @@ void conv_3x3_cuboid(
     #else
     IMAGE_DT weights_in[PARALLEL_FILTER][TILING_IMAGE*3*3], 
     #endif
-    hls::stream< CONV_DT > stream_out[PARALLEL_FILTER], 
+    hls::stream< CONV_MDT > stream_out[PARALLEL_FILTER], 
     bool &flag_fifo, int z, int s, int in_w, int in_h, int in_c, int split_h, int size, int stride, int pad,
     int loop_1, int loop_2, int loop_3, int h_col, int w_col,
     int cond, int new_h_1, int new_h_2)
@@ -1240,7 +1232,7 @@ void conv_3x3_stream(
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_ping,                       
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_pang,
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_weights, 
-    hls::stream< CONV_DT > stream_out[PARALLEL_FILTER], 
+    hls::stream< CONV_MDT > stream_out[PARALLEL_FILTER], 
     const int config_list[32]) 
 {
     int size = 3;//config_list[0];
@@ -1299,7 +1291,7 @@ void conv_switch(
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_1x1,
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &fifo_weights_3x3,
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &fifo_weights_1x1,
-    hls::stream< CONV_DT > stream_out[PARALLEL_FILTER],
+    hls::stream< CONV_MDT > stream_out[PARALLEL_FILTER],
     const int config_list[32]) 
 {
     #pragma HLS inline off
@@ -1312,52 +1304,31 @@ void conv_switch(
 }
 
 void bias_stream(
-    hls::stream< CONV_DT > stream_input[PARALLEL_FILTER],
-    hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > &fifo_bias, 
-    hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > &stream_output, 
-    const int config_list[32], 
-    const float quant_multipler[2]) 
+    hls::stream< CONV_MDT > stream_input[PARALLEL_FILTER],
+    hls::stream< ap_int< WIDE_BUS_WIDTH > > & fifo_bias, 
+    hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > & stream_output, 
+    const int config_list[32])
 {
     //int batch_normalize = config_list[12];
     int in_w = config_list[5];
     int n = config_list[7];
+    int right_shift_cnt = config_list[11];
     int activation = config_list[14];
     int in_wh = config_list[18];
-    //float weights_quant_multipler = quant_multipler[0];//4.000000;
-    //float input_quant_multipler = quant_multipler[1];//15.497000;
-    //float ALPHA = R_MULT / (input_quant_multipler * weights_quant_multipler);
-    float ALPHA = quant_multipler[0];
-    float post_input_quant_multipler = quant_multipler[1];//12.537000;
 #ifdef DEBUG_BIAS
     int batch_normalize = config_list[12];
     printf("in_wh:%d ", in_wh);
     printf("n:%d, batch_normalize:%d, activation:%d\n",n,batch_normalize,activation);
-    printf("alpha:%f, q_mul_post_in:%f\n", ALPHA, post_input_quant_multipler);
-    //printf("q_mul_weight:%f, q_mul_in:%f, q_mul_post_in:%f\n", weights_quant_multipler, input_quant_multipler, post_input_quant_multipler);
 #endif
-    BIAS_DT biases[PARALLEL_FILTER];
-    //BIAS_DT scales[PARALLEL_FILTER];
-    //BIAS_DT rolling_mean[PARALLEL_FILTER];
-    //BIAS_DT rolling_variance[PARALLEL_FILTER];
+    IMAGE_4DT biases[PARALLEL_FILTER];
     for (int t = 0; t < n / PARALLEL_FILTER; t++) {
         #pragma HLS loop_tripcount min = 2 max = 2
+        ap_int< WIDE_BUS_WIDTH > bias_buf = fifo_bias . read();
         for (int p = 0; p < PARALLEL_FILTER; p++) {
-            #pragma HLS pipeline
-            ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > input_buf = fifo_bias . read();
-            ap_int< 32 > tmp;
-
-            tmp = input_buf(((0 + 1) * 32 - 1), (0 * 32));
-            //tmp[1] = input_buf(((1 + 1) * 32 - 1), (1 * 32));
-            //tmp[2] = input_buf(((2 + 1) * 32 - 1), (2 * 32));
-            //tmp[3] = input_buf(((3 + 1) * 32 - 1), (3 * 32));
-            biases[p] = Reinterpret<BIAS_DT>(tmp);
-            //scales[p] = Reinterpret<BIAS_DT>(tmp[1]);
-            //rolling_mean[p] = Reinterpret<BIAS_DT>(tmp[2]);
-            //rolling_variance[p] = Reinterpret<BIAS_DT>(tmp[3]);
+            biases[p] = bias_buf(((p + 1) * 32 - 1), (p * 32));
 
 #ifdef DEBUG_BIAS
-            printf("biases[%d]:%f\n", p,biases[p]);
-            //printf("biases[%d]:%f scales[%d]:%f rolling_mean[%d]:%f rolling_variance[%d]:%f\n", p,biases[p],p,scales[p],p,rolling_mean[p],p,rolling_variance[p]);
+            printf("biases[%d]:%d\n", p, biases[p].to_int());
 #endif
         }
         int index = 0;
@@ -1369,45 +1340,33 @@ void bias_stream(
                 stream_output . write(0);
             } else {
                 for (int p = 0; p < PARALLEL_FILTER; p++) {
-                    CONV_DT input_buf = stream_input[p] . read();
-
-                    float tmp_o1 = (float )(input_buf . to_int());
-                    float tmp_o2 = tmp_o1 * ALPHA;
-                    //if (batch_normalize == 100) {
-                    //    float tmp_o20 = tmp_o1-rolling_mean[p];
-                    //    float tmp_o21 = sqrtf((float )rolling_variance[p]) + .000001f;
-                    //    float tmp_o22 = tmp_o20 / tmp_o21;
-                    //    tmp_o2 = tmp_o22*scales[p];
-                    //}
-                    float tmp_o3 = tmp_o2 + biases[p];
-                    float tmp_o4;
-                    if ((activation == 1) && (tmp_o3 < 0)) {
-                        tmp_o4 = tmp_o3 * ((float )0.10);
+                    CONV_MDT input_buf = stream_input[p] . read();
+                    CONV_MDT sum0 = input_buf + biases[p];
+                    IMAGE_DT sum1 = xilinx_quantizer_shift(sum0, right_shift_cnt);
+                    IMAGE_DT sum2;
+                    if (activation == 1) {
+                        if (sum1 < 0) {
+                            IMAGE_4DT sum3 = sum1 * 104;
+                            sum2 = xilinx_quantizer_shift(sum3, 10);
+                        } else {
+                            IMAGE_4DT sum3 = sum1;
+                            sum2 = xilinx_quantizer_shift(sum3, 0);
+                        }
                     } else {
-                        tmp_o4 = tmp_o3;
+                        sum2 = sum1;
                     }
-                    float tmp_o5 = tmp_o4 * post_input_quant_multipler;
-                    short tmp_o6 = (short)tmp_o5;
-                    CONV_DT tmp_o7 = (CONV_DT)tmp_o6;
-                    IMAGE_DT tmp_o8 = max_abs(tmp_o7, 127);
-                    tmp_a[p] = tmp_o8;
+                    tmp_a[p] = sum2;
 #ifdef DEBUG_BIAS
                     if(p == 0){
-                        printf("bias_o1[%3d]: %f = in:%.2f * ALPHA:%f, ",i, tmp_o1, ((float )(input_buf . to_int())),ALPHA);
-                        printf("o3:%f, o4: %f o5: %f ",tmp_o3, tmp_o4, tmp_o5);
-                        printf("o7: %d, o8[%3d]: %d\n", tmp_o7.to_int(), i, tmp_o8.to_int());
+                        printf("debug_bias_data[%d] : bias[%3d] + in[%3d] = [%3d] -> q[%d] -> act[%d]\n",i, biases[p].to_int(), input_buf.to_int(), sum0.to_int(), sum1.to_int(), sum2.to_int());
+                        if (i % in_w == in_w - 1) {
+                            printf("\n");
+                        }
                     }
 #endif
                 }
                 ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > output_buf = ((((((((((((((((tmp_a[15] , tmp_a[14] , tmp_a[13])) , tmp_a[12] , tmp_a[11])) , tmp_a[10] , tmp_a[9])) , tmp_a[8] , tmp_a[7])) , tmp_a[6] , tmp_a[5])) , tmp_a[4] , tmp_a[3])) , tmp_a[2] , tmp_a[1])) , tmp_a[0]));
                 stream_output . write(output_buf);
-#ifdef DEBUG_BIAS
-                ap_int< 8 > tmp_buf = (output_buf(((0 + 1) * 8 - 1), (0 * 8)));
-                printf("debug_bias_data[%3d]=%3d ", i,(tmp_buf . to_int()));
-                if (i % in_w == in_w - 1) {
-                    printf("\n");
-                }
-#endif
             }
             index++;
             if(index == in_w) {
@@ -1418,11 +1377,10 @@ void bias_stream(
 }
 
 void bias_switch(
-    hls::stream< CONV_DT > stream_input[PARALLEL_FILTER],
-    hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > &fifo_bias, 
-    hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > &stream_output, 
-    const int config_list[32], 
-    const float quant_multipler[2])
+    hls::stream< CONV_MDT > stream_input[PARALLEL_FILTER],
+    hls::stream< ap_int< WIDE_BUS_WIDTH > > & fifo_bias, 
+    hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > & stream_output, 
+    const int config_list[32]) 
 {
 
     #pragma HLS inline off
@@ -1431,7 +1389,7 @@ void bias_switch(
     #endif
     //int conv_en = config_list[0];
     //if (conv_en == 1 || conv_en == 3) {
-    bias_stream(stream_input, fifo_bias,stream_output,config_list,quant_multipler);
+    bias_stream(stream_input, fifo_bias,stream_output,config_list);
     //}
     #ifdef DEBUG_BIAS
     printf("finish_bias\n");
@@ -1442,7 +1400,8 @@ void shortcut_core(
     ap_int< WIDE_BUS_WIDTH > *buf_in_image, 
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > &stream_input, 
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > &stream_output, 
-    int burst_length, int in_w)
+    int burst_length, int in_w,
+    int right_shift_cnt0, int right_shift_cnt1, int right_shift_cnt2)
 {
     merlinL77:
     for (int i = 0; i < burst_length/FACTORS; i++) {
@@ -1456,9 +1415,11 @@ void shortcut_core(
             for (int p = 0; p < PARALLEL_FILTER; p++) {
                 ap_int< ORG_DATA_WIDTH > tmp_buf1 = (input_buf1(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
                 ap_int< ORG_DATA_WIDTH > tmp_buf2 = (input_buf2(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
-                CONV_DT tmp_o1 = (tmp_buf1 + tmp_buf2);
-                IMAGE_DT tmp_o2 = max_abs(tmp_o1, 127);
-                tmp_a[p] = tmp_o2;
+                IMAGE_4DT tmp_o1 = tmp_buf1 << right_shift_cnt0;
+                IMAGE_4DT tmp_o2 = tmp_buf2 << right_shift_cnt1;
+                IMAGE_4DT tmp_o = (tmp_o1 + tmp_o2);
+                IMAGE_DT sum1 = xilinx_quantizer_shift(tmp_o, right_shift_cnt2);
+                tmp_a[p] = sum1;
             }
             ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > output_buf = ((((((((((((((((tmp_a[15] , tmp_a[14] , tmp_a[13])) , tmp_a[12] , tmp_a[11])) , tmp_a[10] , tmp_a[9])) , tmp_a[8] , tmp_a[7])) , tmp_a[6] , tmp_a[5])) , tmp_a[4] , tmp_a[3])) , tmp_a[2] , tmp_a[1])) , tmp_a[0]));
             stream_output . write(output_buf);
@@ -1483,6 +1444,9 @@ void shortcut_stream(
 {
    //printf("start_shortcut_stream\n");
     int in_w = config_list[5];
+    int right_shift_cnt0 = config_list[11];
+    int right_shift_cnt1 = config_list[12];
+    int right_shift_cnt2 = config_list[13];
     int burst_length = config_list[24];
     int loop_bound = config_list[25];
     int input_idx = config_list[28];
@@ -1503,7 +1467,7 @@ void shortcut_stream(
     for (int t = 0; t < loop_bound; t++) {
         #pragma HLS loop_tripcount min = 64 max = 64
         memcpy((void*)buf_in_image, (void*)&in_image[t*burst_length/4 + input_idx], sizeof(ap_int< WIDE_BUS_WIDTH >) * burst_length/4);
-        shortcut_core(buf_in_image, stream_input, stream_output, burst_length, in_w);
+        shortcut_core(buf_in_image, stream_input, stream_output, burst_length, in_w, right_shift_cnt0, right_shift_cnt1, right_shift_cnt2);
     }
 }
 
@@ -1807,7 +1771,7 @@ void top_kernel(ap_int< WIDE_BUS_WIDTH > *merlin_input,
     #pragma HLS stream variable = fifo_image_pang depth = 512
     #pragma HLS resource variable = fifo_image_pang core=fifo_lutram
 
-    hls::stream< CONV_DT > fifo_image_conv[PARALLEL_FILTER];
+    hls::stream< CONV_MDT > fifo_image_conv[PARALLEL_FILTER];
     #pragma HLS stream variable = fifo_image_conv depth = 512
 
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > fifo_image_bias("fifo_image_bias");
@@ -1819,7 +1783,7 @@ void top_kernel(ap_int< WIDE_BUS_WIDTH > *merlin_input,
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > fifo_image_upsample("fifo_image_upsample");
     #pragma HLS stream variable = fifo_image_upsample depth = 512
 
-    hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > fifo_bias("fifo_bias");
+    hls::stream< ap_int< WIDE_BUS_WIDTH > > fifo_bias("fifo_bias");
     #pragma HLS stream variable = fifo_bias depth = 512
 
     hls::stream< ap_int< WIDE_BUS_WIDTH > > fifo_weights_3x3("fifo_weights_3x3");
@@ -1864,8 +1828,7 @@ void top_kernel(ap_int< WIDE_BUS_WIDTH > *merlin_input,
             fifo_image_conv, 
             fifo_bias, 
             fifo_image_bias, 
-            config_list_all[layer_cnt][0], 
-            quant_multipler[layer_cnt]);
+            config_list_all[layer_cnt][0]);
 
         shortcut_switch(
             input_add, 

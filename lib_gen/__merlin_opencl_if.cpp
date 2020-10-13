@@ -32,7 +32,7 @@ int init(const std::string& binaryFileName) {
     for(int i=0; i<OVERLAP; i++) {
         // set size for extend buffer
         // data_input include all layer input and output
-        w_in[i].resize(OUTPUT_LAYER_NUM*1024*1024 + OUTPUT_LAYER_NUM*4096*sizeof(float)/sizeof(DATA_T)); 
+        w_in[i].resize(OUTPUT_LAYER_NUM*1024*1024 + OUTPUT_LAYER_NUM*1024*sizeof(BIAS_DT)); 
         data_input[i].resize(OUTPUT_LAYER_NUM*1024*1024);
    
         // map host bufer to opencl buffer
@@ -46,7 +46,7 @@ int init(const std::string& binaryFileName) {
         // create opencl buffer
         buffer_weights[i] = new cl::Buffer(*m_context, 
                                            CL_MEM_EXT_PTR_XILINX | CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
-                                           (OUTPUT_LAYER_NUM*1024*1024 + OUTPUT_LAYER_NUM*4096*sizeof(float)/sizeof(DATA_T))*sizeof(DATA_T),
+                                           (OUTPUT_LAYER_NUM*1024*1024 + OUTPUT_LAYER_NUM*1024*sizeof(BIAS_DT)),
                                            &ext_buffer_weights[0]);     
         buffer_input[i]   = new cl::Buffer(*m_context,
                                            CL_MEM_EXT_PTR_XILINX | CL_MEM_USE_HOST_PTR | CL_MEM_READ_WRITE,

@@ -236,20 +236,20 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             // transform back the sequence
             config_format[0] = 16;
             config_format[1] = 13;
-            config_format[2] = 256;
-            config_format[3] = 256;
+            config_format[2] = 80;
+            config_format[3] = 80;
             config_format[4] = PARALLEL_FILTER;
             data_format_transform_back(yolo1_pre_format, yolo1_pre, config_format);
             config_format[0] = 28;
             config_format[1] = 26;
-            config_format[2] = 256;
-            config_format[3] = 256;
+            config_format[2] = 80;
+            config_format[3] = 80;
             config_format[4] = PARALLEL_FILTER;
             data_format_transform_back(yolo2_pre_format, yolo2_pre, config_format);
             config_format[0] = 52;
             config_format[1] = 52;
-            config_format[2] = 256;
-            config_format[3] = 256;
+            config_format[2] = 80;
+            config_format[3] = 80;
             config_format[4] = PARALLEL_FILTER;
             data_format_transform_back(yolo3_pre_format, yolo3_pre, config_format);
             
@@ -271,17 +271,17 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
                 int data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*config_list_all[layer_x][2][7];
                 if(layer_x == 58){
                     org_layer = 81;// old layer
-                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*255;
+                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*75;
                 } else if(layer_x == 59){
                     org_layer = 85;// old layer
                 } else if(layer_x == 66){
                     org_layer = 93;// old layer
-                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*255;
+                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*75;
                 } else if(layer_x == 67){
                     org_layer = 97;// old layer
                 } else if(layer_x == 74){
                     org_layer = 105;// old layer
-                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*255;
+                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*75;
                 } else{
                     org_layer = index_conv[layer_x + 1] - 1;
                 }
@@ -306,7 +306,6 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 }
 
 int __merlin_load_weight(DATA_T *weights[75], int32_t bias[75][1024]) {
-//int __merlin_load_weight(DATA_T *weights[OUTPUT_LAYER_NUM], int32_t bias[OUTPUT_LAYER_NUM][1024]) {
     int layer_cnt = 0;
     printf("library loading weight ");
     for(layer_cnt = 0; layer_cnt < OUTPUT_LAYER_NUM; layer_cnt++){
@@ -320,28 +319,28 @@ int __merlin_load_weight(DATA_T *weights[75], int32_t bias[75][1024]) {
                    * config_list_all[layer_cnt][0][7] \
                    * sizeof(DATA_T));
             // copy bias
-            memcpy(w_in[i].data() + OUTPUT_LAYER_NUM * 1024 * 1024 + layer_cnt * 1024 * 4,
+            memcpy(w_in[i].data() + OUTPUT_LAYER_NUM * 1024 * 1024 + layer_cnt * 1024 * sizeof(BIAS_DT),
                    bias[layer_cnt],
-                   config_list_all[layer_cnt][0][7] * 4 * sizeof(float));
+                   config_list_all[layer_cnt][0][7] * sizeof(BIAS_DT));
         }
     }
     printf("\n");
     for(int i=0; i<OVERLAP; i++) {
         q[i]->enqueueMigrateMemObjects({*(buffer_weights[i])}, 0);
-        /*
-        //debug
         
+        //debug
+        /* 
         q[i]->finish();
         q[i]->enqueueMigrateMemObjects({*(buffer_weights[i])},
                                        CL_MIGRATE_MEM_OBJECT_HOST);
         q[i]->finish();
 
-        float bias_tmp[32];
+        BIAS_DT bias_tmp[32];
         memcpy(bias_tmp,
                w_in[0].data() + OUTPUT_LAYER_NUM * 1024 * 1024 ,
-               32 * sizeof(float));
+               32 * sizeof(BIAS_DT));
         for(int i=0; i<32; i++) {
-            printf("10 bias_in[%d]=%f\n", i, bias_tmp[i]);
+            printf("10 bias_in[%d]=%d\n", i, bias_tmp[i]);
         }
         */
         //debug
