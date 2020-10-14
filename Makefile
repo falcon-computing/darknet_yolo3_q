@@ -5,6 +5,7 @@ OPENMP=0
 DEBUG=0
 FPGA=1
 DEBUG_CPU=1
+TIME=1
 
 ARCH= -gencode arch=compute_30,code=sm_30 \
       -gencode arch=compute_35,code=sm_35 \

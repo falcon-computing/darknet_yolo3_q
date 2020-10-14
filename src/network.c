@@ -301,7 +301,10 @@ void forward_network(network *netp)
             write_data_file_int8_input(i, net.input, l.inputs);
         }
         #endif
+        double time;
+        time=what_time_is_it_now();
         l.forward(l, net);
+        printf("layer %d in %f seconds.\n", i, what_time_is_it_now()-time); 
         #ifdef OUTPUT_REF
         if(i != 82 && i != 94 && i != 106) {
             write_data_file_int8(i, l.output, l.outputs);
@@ -424,7 +427,9 @@ void forward_network_fpga(network *netp, int * test_cfg)
     //=======================================================
     //
     printf("loading weight\n");
+    #ifdef FPGA
     __merlin_load_weight(weights_in, bias_in);
+    #endif
     #ifdef DEBUG_CPU
     int debug_config[10];
     debug_config[0] = debug_layer;//new layer
@@ -477,12 +482,14 @@ void forward_network_fpga(network *netp, int * test_cfg)
     struct timeval tv_start, tv_end;
     double exe_time;
     gettimeofday(&tv_start, NULL);
+    #ifdef FPGA
     #ifdef DEBUG_CPU
-    __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_pre, yolo2_pre, yolo3_pre, debug_config);
+    __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_pre, yolo2_pre, yolo3_pre, 1, debug_config);
     exit(1);
     #else
-    __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_pre, yolo2_pre, yolo3_pre, 0);
+    __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_pre, yolo2_pre, yolo3_pre, 1, 0);
     #endif // DEBUG_CPU
+    #endif
     gettimeofday(&tv_end, NULL);
     exe_time = (tv_end.tv_sec - tv_start.tv_sec) * 1000.0 + (tv_end.tv_usec - tv_start.tv_usec)/1000.0;                
     printf("E2E time %f \n",exe_time);
@@ -796,11 +803,14 @@ float *network_predict_fpga(network *net, float *input, int * test_cfg)
     network orig = *net;
     // net->input = input;
     int i_q;
+    double time;
+    time=what_time_is_it_now();
     for (i_q = 0; i_q < net->inputs; ++i_q)
     {
         net->input[i_q] = xilinx_quantizer_shift(round(input[i_q] * 64), 0);
         //net->input[i_q] = round(input[i_q] * 64);
     }
+    printf("first layer quantize in %f seconds.\n", what_time_is_it_now()-time); 
     int sum_aq = sum_f(net->input, net->inputs);
     
     net->truth = 0;
