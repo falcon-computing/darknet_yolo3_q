@@ -11,8 +11,7 @@ typedef float BIAS_DT;
 typedef ap_int< ORG_DATA_WIDTH*2 > IMAGE_2DT;
 typedef ap_int< ORG_DATA_WIDTH*4 > IMAGE_4DT;
 typedef ap_int< ORG_DATA_WIDTH*8 > IMAGE_8DT;
-typedef ap_int< ORG_DATA_WIDTH*2 > CONV_DT;
-typedef ap_int< ORG_DATA_WIDTH*4 > CONV_MDT;
+typedef ap_int< ORG_DATA_WIDTH*4 > CONV_DT;
 
 template <typename To, typename From>
 inline To Reinterpret(const From& val){
@@ -104,12 +103,12 @@ void stream_in_weights(
                         fifo_weights_3x3.write(buf_input);
 #ifdef DEBUG_WEIGHT
                     for (int f = 0; f < FACTORS; f++) {
-                        ap_int< ORG_DATA_WIDTH > tmp_x;
-                        tmp_x = buf_input(f * 128 + ORG_DATA_WIDTH - 1, f * 128 + 0);
-                        printf("debug_weight[%3d][%3d]=%d ", (j * 4 + f) / in_h,(j * 4 + f) % in_h,(tmp_x . to_int()));
-                        if ((j * FACTORS + f) % in_h == in_h - 1) {
-                            printf("\n");
+                        for (int p = 0; p < 16; p++){
+                            ap_int< ORG_DATA_WIDTH > tmp_x;
+                            tmp_x = buf_input((f * 128 + p*8 + 7),(f * 128 + p*8));
+                            printf("debug_weight[%3d][%3d]=%3d ", p, s*burst_length_single*4+j*4+f,(tmp_x . to_int()));
                         }
+                        printf("\n");
                     }
 #endif
                 }
@@ -438,9 +437,9 @@ void conv_1x1_core(
                     bool flag1 = weight1_tmp(7, 7);
                     bool flag2 = image_tmp(7, 7);
 
-                    ap_int<26> w_tmp;
-                    ap_int<8> w_tmp_reg0;
-                    ap_int<8> w_tmp_reg1;
+                    ap_uint<26> w_tmp;
+                    ap_uint<8> w_tmp_reg0;
+                    ap_uint<8> w_tmp_reg1;
                     if(flag0 == 1)
                         w_tmp_reg0( 7, 0) = ~weight0_tmp( 7, 0) + 1;
                     else
@@ -469,12 +468,12 @@ void conv_1x1_core(
                     result_sum0 += sum0_tmp;
                     result_sum1 += sum1_tmp;
 #ifdef DEBUG_CONV
-                    printf("l%d:(f0:%3d, f1:%3d)*(s:%3d) = ",l,(weight0_tmp . to_int()),(weight1_tmp . to_int()),(image_tmp . to_int()));
+                    printf("p%2d l%2d:(f0:%3d, f1:%3d)*(s:%3d) = ",p,l,(weight0_tmp . to_int()),(weight1_tmp . to_int()),(image_tmp . to_int()));
                     IMAGE_DT f0 = w_tmp(7,0);
                     IMAGE_DT f1 = w_tmp(25,18);
                     printf("(f0:%3d, f1:%3d)*(s:%3d) ",(f0 . to_int()),(f1 . to_int()),(s_tmp . to_int()));
                     printf("(s0:%3d, s1:%3d)",(sum0_tmp . to_int()),(sum1_tmp . to_int()));
-                    printf("sum0:%d, sum1:%d ",(result_sum0 . to_int()),(result_sum1 . to_int()));
+                    printf("sum0:%3d, sum1:%3d ",(result_sum0 . to_int()),(result_sum1 . to_int()));
                     printf("\n");
 #endif
                     #else
@@ -545,7 +544,7 @@ void conv_1x1_weights(
 void conv_1x1_stream(
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_data_in, 
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &fifo_weights, 
-    hls::stream< CONV_MDT > stream_data_out[PARALLEL_FILTER], 
+    hls::stream< CONV_DT > stream_data_out[PARALLEL_FILTER], 
     const int config_list[32]) 
 {
     int in_c = config_list[3];
@@ -584,24 +583,23 @@ void conv_1x1_stream(
                             if(out_w != 16 || index < 13) {
                                 #ifdef DSP_PACK
                                 for (int p = 0; p < PARALLEL_FILTER / 2; p++) {
-                                    CONV_MDT buf0_output = sum_buffer[p][wh * FACTORS + f](31,0);
-                                    CONV_MDT buf1_output = sum_buffer[p][wh * FACTORS + f](63,32);
+                                    CONV_DT buf0_output = sum_buffer[p][wh * FACTORS + f](31,0);
+                                    CONV_DT buf1_output = sum_buffer[p][wh * FACTORS + f](63,32);
                                     stream_data_out[p*2+0] . write(buf0_output);
                                     stream_data_out[p*2+1] . write(buf1_output);
+#ifdef DEBUG_BURST
+                                    printf("debug_1x1_result[p%d][%3d]=%5d ", p*2+0, (wh * FACTORS + f),  buf0_output . to_int());
+                                    printf("debug_1x1_result[p%d][%3d]=%5d ", p*2+1, (wh * FACTORS + f),  buf1_output . to_int());
+#endif
                                 #else
                                 for (int p = 0; p < PARALLEL_FILTER; p++) {
-                                    CONV_MDT buf0_output = sum_buffer[p][wh * FACTORS + f](31,0);
+                                    CONV_DT buf0_output = sum_buffer[p][wh * FACTORS + f](31,0);
                                     stream_data_out[p] . write(buf0_output);
                                 #endif
-#ifdef DEBUG_BURST
-                                    if(p == 0){
-                                        printf("debug_1x1_result[%d][%3d][%3d]=%d ", p, (wh * FACTORS + f)/208, (wh * FACTORS + f)%208, buf0_output . to_int());
-                                        if ( (wh *FACTORS + f) % 208 == 208 - 1) {
-                                            printf("\n");
-                                        }
-                                    }
-#endif
                                 }
+#ifdef DEBUG_BURST
+                                printf("\n");
+#endif
                             }
                             index ++;
                             if(index == out_w) 
@@ -854,9 +852,9 @@ void conv_3x3_core(
                     bool flag0 = weight0_tmp(7, 7);
                     bool flag1 = weight1_tmp(7, 7);
                     bool flag2 = shift_tmp(7, 7);
-                    ap_int<26> w_tmp;
-                    ap_int<8> w_tmp_reg0;
-                    ap_int<8> w_tmp_reg1;
+                    ap_uint<26> w_tmp;
+                    ap_uint<8> w_tmp_reg0;
+                    ap_uint<8> w_tmp_reg1;
                     if(flag0 == 1)
                         w_tmp_reg0(7, 0) = ~weight0_tmp(7, 0) + 1;
                     else
@@ -1101,7 +1099,7 @@ void adder_out(
     #else
     hls::stream< IMAGE_4DT > stream_data_in[PARALLEL_FILTER], 
     #endif
-    hls::stream< CONV_MDT > stream_data_out[PARALLEL_FILTER], 
+    hls::stream< CONV_DT > stream_data_out[PARALLEL_FILTER], 
     int z, int s, int in_w, int in_c, int size, int stride, int pad, int new_h,
     int h_col, int w_col)
 {
@@ -1149,12 +1147,12 @@ void adder_out(
             }
             if (s == in_c / TILING_IMAGE - 1) {
                 #ifdef DSP_PACK
-                CONV_MDT buf0_output = conv_sum[p*2+0][i];
-                CONV_MDT buf1_output = conv_sum[p*2+1][i];
+                CONV_DT buf0_output = conv_sum[p*2+0][i];
+                CONV_DT buf1_output = conv_sum[p*2+1][i];
                 stream_data_out[p*2+0] . write(buf0_output);
                 stream_data_out[p*2+1] . write(buf1_output);
                 #else
-                CONV_MDT buf0_output = conv_sum[p][i];
+                CONV_DT buf0_output = conv_sum[p][i];
                 stream_data_out[p] . write(buf0_output);
                 #endif
 #ifdef DEBUG_CONV
@@ -1170,12 +1168,16 @@ void adder_out(
                 }
 #endif
             }
-            //else {
-            //    printf("conv_sum_tmp[%3d][%3d] = %3d ", i / w_col,i % w_col,(conv_sum[i] . to_int()));
-            //    if (i % w_col == w_col - 1) {
-            //        printf("\n");
-            //    }
-            //}
+#ifdef DEBUG_CONV
+            else {
+                if(p == 0){
+                    printf("conv_sum_tmp[%3d][%3d] = %3d ", i / w_col, i % w_col, (conv_sum[0][i] . to_int()));
+                    if (i % w_col == w_col - 1) {
+                        printf("\n");
+                    }
+                }
+            }
+#endif
         }
     }
 #ifdef DEBUG_CONV
@@ -1192,7 +1194,7 @@ void conv_3x3_cuboid(
     #else
     IMAGE_DT weights_in[PARALLEL_FILTER][TILING_IMAGE*3*3], 
     #endif
-    hls::stream< CONV_MDT > stream_out[PARALLEL_FILTER], 
+    hls::stream< CONV_DT > stream_out[PARALLEL_FILTER], 
     bool &flag_fifo, int z, int s, int in_w, int in_h, int in_c, int split_h, int size, int stride, int pad,
     int loop_1, int loop_2, int loop_3, int h_col, int w_col,
     int cond, int new_h_1, int new_h_2)
@@ -1232,7 +1234,7 @@ void conv_3x3_stream(
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_ping,                       
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_pang,
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_weights, 
-    hls::stream< CONV_MDT > stream_out[PARALLEL_FILTER], 
+    hls::stream< CONV_DT > stream_out[PARALLEL_FILTER], 
     const int config_list[32]) 
 {
     int size = 3;//config_list[0];
@@ -1291,7 +1293,7 @@ void conv_switch(
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_1x1,
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &fifo_weights_3x3,
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &fifo_weights_1x1,
-    hls::stream< CONV_MDT > stream_out[PARALLEL_FILTER],
+    hls::stream< CONV_DT > stream_out[PARALLEL_FILTER],
     const int config_list[32]) 
 {
     #pragma HLS inline off
@@ -1304,7 +1306,7 @@ void conv_switch(
 }
 
 void bias_stream(
-    hls::stream< CONV_MDT > stream_input[PARALLEL_FILTER],
+    hls::stream< CONV_DT > stream_input[PARALLEL_FILTER],
     hls::stream< ap_int< WIDE_BUS_WIDTH > > & fifo_bias, 
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > & stream_output, 
     const int config_list[32])
@@ -1340,8 +1342,8 @@ void bias_stream(
                 stream_output . write(0);
             } else {
                 for (int p = 0; p < PARALLEL_FILTER; p++) {
-                    CONV_MDT input_buf = stream_input[p] . read();
-                    CONV_MDT sum0 = input_buf + biases[p];
+                    CONV_DT input_buf = stream_input[p] . read();
+                    CONV_DT sum0 = input_buf + biases[p];
                     IMAGE_DT sum1 = xilinx_quantizer_shift(sum0, right_shift_cnt);
                     IMAGE_DT sum2;
                     if (activation == 1) {
@@ -1357,14 +1359,12 @@ void bias_stream(
                     }
                     tmp_a[p] = sum2;
 #ifdef DEBUG_BIAS
-                    if(p == 0){
-                        printf("debug_bias_data[%d] : bias[%3d] + in[%3d] = [%3d] -> q[%d] -> act[%d]\n",i, biases[p].to_int(), input_buf.to_int(), sum0.to_int(), sum1.to_int(), sum2.to_int());
-                        if (i % in_w == in_w - 1) {
-                            printf("\n");
-                        }
-                    }
+                    printf("debug_bias_data[%d] : bias[%3d] + in[%3d] = [%3d] -> q[%3d] -> act[%3d] ",i, biases[p].to_int(), input_buf.to_int(), sum0.to_int(), sum1.to_int(), sum2.to_int());
 #endif
                 }
+#ifdef DEBUG_BIAS
+                printf("\n");
+#endif
                 ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > output_buf = ((((((((((((((((tmp_a[15] , tmp_a[14] , tmp_a[13])) , tmp_a[12] , tmp_a[11])) , tmp_a[10] , tmp_a[9])) , tmp_a[8] , tmp_a[7])) , tmp_a[6] , tmp_a[5])) , tmp_a[4] , tmp_a[3])) , tmp_a[2] , tmp_a[1])) , tmp_a[0]));
                 stream_output . write(output_buf);
             }
@@ -1377,7 +1377,7 @@ void bias_stream(
 }
 
 void bias_switch(
-    hls::stream< CONV_MDT > stream_input[PARALLEL_FILTER],
+    hls::stream< CONV_DT > stream_input[PARALLEL_FILTER],
     hls::stream< ap_int< WIDE_BUS_WIDTH > > & fifo_bias, 
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > & stream_output, 
     const int config_list[32]) 
@@ -1771,7 +1771,7 @@ void top_kernel(ap_int< WIDE_BUS_WIDTH > *merlin_input,
     #pragma HLS stream variable = fifo_image_pang depth = 512
     #pragma HLS resource variable = fifo_image_pang core=fifo_lutram
 
-    hls::stream< CONV_MDT > fifo_image_conv[PARALLEL_FILTER];
+    hls::stream< CONV_DT > fifo_image_conv[PARALLEL_FILTER];
     #pragma HLS stream variable = fifo_image_conv depth = 512
 
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > fifo_image_bias("fifo_image_bias");
