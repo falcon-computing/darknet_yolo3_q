@@ -86,8 +86,8 @@ ATTRIBUTE += --attribute memory_coalescing=off
 ATTRIBUTE += --vendor-options "-g"
 ATTRIBUTE += --attribute stream_prefetch=off
 
-N16_LINE:=52
-ONCHIP_SIZE:=13
+N16_LINE:=208
+ONCHIP_SIZE:=52
 N16_LINE_ATT = -DN16_LINE=$(N16_LINE)
 ONCHIP_SIZE_ATT = -DONCHIP_SIZE=$(ONCHIP_SIZE)
 

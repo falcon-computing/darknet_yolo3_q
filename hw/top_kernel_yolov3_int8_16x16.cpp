@@ -4,7 +4,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
-#include "src/config_16x16_q.h"
+#include "../src/config_16x16_q.h"
 
 typedef ap_int< ORG_DATA_WIDTH > IMAGE_DT;
 typedef float BIAS_DT;
@@ -252,7 +252,9 @@ void stream_in_image(
             merlinL7:
             for (int s = 0; s < in_c / PARALLEL_FILTER; s++) {
                 #pragma HLS loop_tripcount min = 2 max = 2
-               //printf("\nt:%d/%d z:%d/%d s:%d/%d, flag_bram:%d\n",t,trans_cnt,z,in_h / split_h,s,in_c / 16,flag_bram);
+#ifdef DEBUG_BURST
+               printf("\nt:%d/%d z:%d/%d s:%d/%d, flag_bram:%d\n",t,trans_cnt,z,in_h / split_h,s,in_c / 16,flag_bram);
+#endif
                 flag_bram = !flag_bram;
                 int write_fifo_line;
                 if (z == 0) {
@@ -276,16 +278,19 @@ void stream_in_image(
                     }
                 }
 #ifdef DEBUG_BURST
-                printf("s1:%d ", s);
+                printf("s1:%d ddr_index0=%d ", s, ddr_index);
 #endif
                 if(in_h == split_h){
                     int N16 = N16xh / in_h;
-                    if (s + N16 == in_c / N16) {
+                    if (s + N16 == in_c / PARALLEL_FILTER) {
                         ddr_index = 0;
                     } else {
                         ddr_index = (s / N16 + 1) * in_wh * N16 ;
                     }
                     s = s + N16 - 1;
+#ifdef DEBUG_BURST
+                printf("N16:%d ", N16);
+#endif
                 } else {
                     if (s + 1 == in_c / PARALLEL_FILTER) {
                         if (z + 1 == in_h_13) {
@@ -303,7 +308,7 @@ void stream_in_image(
                 }
                 ddr_index = ddr_index / FACTORS;
 #ifdef DEBUG_BURST
-                printf(" s2:%d in_h:%d write_fifo_line:%d, burst_length:%d\n",s,in_h,write_fifo_line,burst_length);
+                printf(" s2:%d ddr_index1=%d, in_h:%d,split_h=%d, write_fifo_line:%d, burst_length:%d\n",s,ddr_index,in_h,split_h,write_fifo_line,burst_length);
 #endif
                 if (flag_bram == 1) {
                     if(flag_onchip == 1){
