@@ -609,7 +609,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         float *X = sized.data;
         float *X_q = synth_img; 
         time=what_time_is_it_now();
-        #ifdef FPGA
+        #if FPGA == 1
         network_predict_fpga(net, X, test_cfg);
         #else
         network_predict(net, X);

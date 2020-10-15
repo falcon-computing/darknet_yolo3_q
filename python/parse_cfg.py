@@ -175,6 +175,11 @@ class NetworkParser:
                 if "batch_normalize" in self.dict_network[layer_index]:
                     batch_normalize = self.dict_network[layer_index]["batch_normalize"]
                 activation = self.dict_network[layer_index]["activation"]
+                bpos = self.dict_network[layer_index]["bpos"]
+                wpos = self.dict_network[layer_index]["wpos"]
+                ipos = self.dict_network[layer_index]["ipos"]
+                opos = self.dict_network[layer_index]["opos"]
+                #print("conv:", layer_index,bpos,wpos,ipos,opos, pos)
                 #print(layer_index)
                 #0 conv_en / conv size
                 sub_list[0] = int(size)
@@ -214,8 +219,8 @@ class NetworkParser:
                     pad = 0
                 #10 pad
                 sub_list[10] = int(pad)
-                #11 
-                sub_list[11] = 0
+                #11 pos 
+                sub_list[11] = int(wpos) + int(ipos) - int(opos)
 
                 #12 batch_normalize / loop_3
                 #sub_list[12] = int(batch_normalize)
@@ -298,12 +303,12 @@ class NetworkParser:
                 self.filter_offset.append(filter_offset_address)
                 filter_offset_address += int(sub_list[3] * sub_list[0] * sub_list[0] * sub_list[7] * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
                 sub_list[31] = bias_offset_address
-                bias_offset_address += int(4096*32/WIDE_BUS_WIDTH)
+                bias_offset_address += int(1024*32/WIDE_BUS_WIDTH)
 
                 self.input_size.append(int(sub_list[1] * sub_list[2] * sub_list[3] * ORG_DATA_WIDTH / WIDE_BUS_WIDTH))
                 self.output_size.append(int(sub_list[8] * sub_list[6] * sub_list[7] * ORG_DATA_WIDTH / WIDE_BUS_WIDTH))
                 self.filter_size.append(int(sub_list[3] * sub_list[7] * sub_list[0] * sub_list[0] * ORG_DATA_WIDTH / WIDE_BUS_WIDTH))
-                self.bias_size.append(int(4096*32/WIDE_BUS_WIDTH))
+                self.bias_size.append(int(1024*32/WIDE_BUS_WIDTH))
                     
                 # collect all data and fill to layer
                 sub_dict[layer_name] = sub_list
@@ -312,6 +317,15 @@ class NetworkParser:
                 from_layer = self.dict_network[layer_index]["from"]
                 from_cnt = int(from_layer)
                 activation = self.dict_network[layer_index]["activation"]
+                far_ipos = self.dict_network[layer_index]["far_ipos"]
+                near_ipos = self.dict_network[layer_index]["near_ipos"]
+                if int(far_ipos) > int(near_ipos):
+                    max_ipos = int(far_ipos)
+                else:
+                    max_ipos = int(near_ipos)
+                opos = self.dict_network[layer_index]["opos"]
+                pos = (max_ipos - int(far_ipos))*(2^16) + (max_ipos - int(near_ipos))*(2^8) + (max_ipos - int(opos))
+                #print("shortcut:",layer_index, far_ipos, near_ipos, max_ipos, opos, pos)
                 #0 conv_en / conv size
                 sub_list[0] = int(1)
                 #1 in_w
@@ -339,6 +353,12 @@ class NetworkParser:
                     sub_list[8] = int(feature_size)
                 else:
                     sub_list[8] = int(feature_size + FACTORS - (feature_size % FACTORS))
+                #11 pos
+                sub_list[11] = max_ipos - int(near_ipos)
+                #12 pos
+                sub_list[12] = max_ipos - int(far_ipos)
+                #13 pos
+                sub_list[13] = max_ipos - int(opos)
                 #15
                 sub_list[15] = 0
                 #16 in_w * in_h
@@ -459,14 +479,18 @@ class NetworkParser:
                 #19 out_w * out_h * out_c
                 sub_list[19] = sub_list[5] * sub_list[6] * sub_list[7]
                 #20 read_fifo_line
-                if(sub_list[5] == 56):
+                if(index == 58 or index == 66 or index == 74):
+                    sub_list[20] = int(13 * 8)
+                elif(sub_list[5] == 56):
                     sub_list[20] = int(13 * 8)
                 elif(sub_list[5] == 28 or sub_list[5] == 26 or sub_list[5] == 32 or sub_list[5] == 16 or sub_list[5] == 14):
                     sub_list[20] = int(13 * 16)
                 else:
                     sub_list[20] = int(13 * 416 / sub_list[5])
                 #24 burst_length
-                if(sub_list[5] == 56):
+                if(index == 58 or index == 66 or index == 74):
+                    sub_list[24] = int(13 * sub_list[8] * 5 * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
+                elif(sub_list[5] == 56):
                     sub_list[24] = int(13 * sub_list[8] * 8 * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
                 elif(sub_list[8] == 28 or sub_list[8] == 16 or sub_list[5] == 14):
                     sub_list[24] = int(13 * sub_list[8] * 16 * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
@@ -569,12 +593,14 @@ class CodeGen:
                     default_list[8] = conv_list[8] 
                     #15
                     default_list[15] = conv_list[15] 
-                    default_list[16] = conv_list[16] 
-                    default_list[17] = conv_list[17] 
-                    default_list[18] = conv_list[18] 
-                    default_list[19] = conv_list[19] 
+                    default_list[16] = default_list[1] * default_list[2]
+                    default_list[17] = default_list[1] * default_list[2] * default_list[3]
+                    default_list[18] = default_list[5] * default_list[6]
+                    default_list[19] = default_list[5] * default_list[6] * default_list[7]
                     #20 read_fifo_line
-                    if(default_list[5] == 56):
+                    if(index == 58 or index == 66 or index == 74):
+                        default_list[20] = int(13 * 5)
+                    elif(default_list[5] == 56):
                         default_list[20] = int(13 * 8)
                     elif(default_list[5] == 28 or default_list[5] == 26 or default_list[5] == 32 or default_list[5] == 16 or default_list[5] == 14):
                         default_list[20] = int(13 * 16)
@@ -582,7 +608,9 @@ class CodeGen:
                         default_list[20] = int(13 * 416 / default_list[5])
                     default_list[21] = conv_list[21] 
                     #24 burst_length
-                    if(conv_list[5] == 56):
+                    if(index == 58 or index == 66 or index == 74):
+                        default_list[24] = int(13 * conv_list[8] * 5 * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
+                    elif(conv_list[5] == 56):
                         default_list[24] = int(13 * conv_list[8] * 8 * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
                     elif(conv_list[8] == 28 or conv_list[8] == 16 or conv_list[5] == 14):
                         default_list[24] = int(13 * conv_list[8] * 16 * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
@@ -633,7 +661,6 @@ if __name__ == '__main__':
     TILING_IMAGE = 16
     ORG_DATA_WIDTH = 8
     WIDE_BUS_WIDTH = 512
-    R_MULT = 32
     FACTORS = int(WIDE_BUS_WIDTH / ORG_DATA_WIDTH / PARALLEL_FILTER)
     cfg_file = args.cfg
     print("1. Parsing cfg file...")
@@ -672,26 +699,7 @@ if __name__ == '__main__':
     header_config += "#define SPLITING_FACTOR    " + str(SPLITING_FACTOR) + "\n"
     header_config += "#define INPUT_LAYER_NUM    " + str(input_layer_num) + "\n"
     header_config += "#define OUTPUT_LAYER_NUM   " + str(output_layer_num) + "\n"
-    header_config += "#define R_MULT             " + str(R_MULT) + "\n"
     header_config += "#define FACTORS            " + str(FACTORS) + "\n"
-    header_config += "const float quant_multipler[75][2]=   " + "\n" \
-    + "{" + "\n"\
-    + "\t{ R_MULT / (4   * 15.497), 12.537}, { R_MULT / (256  * 12.537), 40.000}, { R_MULT / (64  * 40.000), 40.000}, { R_MULT / (128  * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000},//0~4 " + "\n"\
-    + "\t{ R_MULT / (256 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (128 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (1024 * 40.000), 40.000},//5~14" + "\n"\
-    + "\t{ R_MULT / (256 * 40.000), 40.000}, { R_MULT / (2048 * 40.000), 40.000}, { R_MULT / (128 * 40.000), 40.000}, { R_MULT / (1024 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000},//10~14" + "\n"\
-    + "\t{ R_MULT / (512 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (512 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000},//15~19" + "\n"\
-    + "\t{ R_MULT / (256 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (256 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000},//20~24" + "\n"\
-    + "\t{ R_MULT / (256 * 40.000), 40.000}, { R_MULT / (2048 * 40.000), 40.000}, { R_MULT / (256 * 40.000), 40.000}, { R_MULT / (4096 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000},//25~29" + "\n"\
-    + "\t{ R_MULT / (1024* 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (512 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000},//30~34" + "\n"\
-    + "\t{ R_MULT / (256 * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000}, { R_MULT / (512 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000},//35~39" + "\n"\
-    + "\t{ R_MULT / (512 * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000}, { R_MULT / (256 * 40.000), 40.000}, { R_MULT / (2048 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000},//40~44" + "\n"\
-    + "\t{ R_MULT / (2048* 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (512 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000},//45~49" + "\n"\
-    + "\t{ R_MULT / (512 * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}, { R_MULT / (512 * 40.000), 40.000}, { R_MULT / (1024 * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000},//50~54" + "\n"\
-    + "\t{ R_MULT / (1024* 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000}, { R_MULT / (512 * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000},//55~59" + "\n"\
-    + "\t{ R_MULT / (512 * 40.000), 40.000}, { R_MULT / (1024 * 40.000), 40.000}, { R_MULT / (256 * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000},//60~64" + "\n"\
-    + "\t{ R_MULT / (512 * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000}, { R_MULT / (128 * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000},//65~69" + "\n"\
-    + "\t{ R_MULT / (128 * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000}, { R_MULT / (128 * 40.000), 40.000}, { R_MULT / (512  * 40.000), 40.000}, { R_MULT / (256  * 40.000), 40.000}//70~74" + "\n"\
-    + "};" + "\n"
 
     #add constant array
     header_config += code_gen.generate_config_list_header(dict_config)
@@ -713,13 +721,13 @@ if __name__ == '__main__':
     print("   index_conv generated.")
     #generate address list
     if PARALLEL_FILTER == 16:
-        config_file_name = 'hw/config_16x16_q.h';
+        config_file_name = 'src/config_16x16_q.h';
     elif PARALLEL_FILTER == 8:
-        config_file_name = 'hw/config_8x8.h';
+        config_file_name = 'src/config_8x8.h';
     elif PARALLEL_FILTER == 4:
-        config_file_name = 'hw/config_4x4.h';
+        config_file_name = 'src/config_4x4.h';
     else:
-        config_file_name = 'hw/config.h';
+        config_file_name = 'src/config.h';
 
 
     with open(config_file_name, 'w') as f:

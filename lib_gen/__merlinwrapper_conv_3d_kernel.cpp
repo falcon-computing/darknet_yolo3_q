@@ -8,7 +8,7 @@
 #include "__merlin_opencl_if.h"
 #include "time.h"
 #include <sys/time.h>
-//#define TIME
+//#define DEBUG_LIB
 double what_time_is_it_now()
 {
     struct timeval time;
@@ -28,7 +28,7 @@ double what_time_is_it_now()
 // H0H1H2H3H4H5H6H7....
 // ......
 void data_format_transform_back(DATA_T *a, DATA_T *b, int *config) {
-    printf("enter data transformation back\n");
+//    printf("enter data transformation back\n");
     int w = config[0];
     int h = config[1];
     int c_in = config[2];
@@ -85,7 +85,7 @@ void data_format_transform_back(DATA_T *a, DATA_T *b, int *config) {
 // I0J0K0L0M0N0O0P0......
 // ......
 void data_format_transform(DATA_T *a, DATA_T *b, int *config) {
-    printf("enter data transformation\n");
+//    printf("enter data transformation\n");
     int w = config[0];
     int h = config[1];
     int c_in = config[2];
@@ -155,6 +155,10 @@ void write_data_file(int layer, DATA_T * value, int size) {
 }
 
 
+//===========================================//
+//use pingpong queue to do batches of images
+//when ping do computing, pong do data transfor and some other data processes
+//===========================================//  
 int __merlin_exec_top_kernel_overlap(DATA_T * input,
                                      DATA_T * yolo1_pre, DATA_T * yolo2_pre, DATA_T * yolo3_pre,
                                      int batch,
@@ -167,10 +171,12 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     int layer_size = debug_config[4];
     int layer_c = debug_config[5];
     int image_size = config_list_all[layer_min][0][1] * config_list_all[layer_min][0][2] * layer_c;
+#ifdef DEBUG_LIB
     printf("debug value:new_layer=%d, old_layer=%d, min=%d, max=%d, size=%d, c=%d\n", debug_config[0], debug_config[1], debug_config[2], debug_config[3], debug_config[4], debug_config[5]);
     printf("input size:%d %d\n", layer_size, config_list_all[layer_min][0][17]);
     printf("input index:%d\n", config_list_all[layer_min][0][28]);
     printf("w:%d, h:%d, c:%d\n", config_list_all[layer_min][0][1], config_list_all[layer_min][0][2], layer_c);
+#endif
 
 
     int config_format[5];
@@ -184,7 +190,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     for(i=0; i<OVERLAP; i++) {
         layer_0_in_format[i] = (DATA_T*)malloc(config_list_all[layer_min][0][17] * sizeof(DATA_T));
     }
-#ifdef TIME
+#ifdef DEBUG_LIB
     double time;
 #endif
     int overlap = batch == 1 ? 1 : OVERLAP;
@@ -195,46 +201,64 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     for(frame_cnt = 0; frame_cnt < batch + overlap; frame_cnt++){
         queue_idx = overlap == 1 ? 0 : flag % OVERLAP;
         if(frame_cnt >= overlap){
+            //===========================================//
+            //wait queue to finish
+            //ping wait last ping task to finish
+            //pong wait last pong task to finish
+            //===========================================//
             q[queue_idx]->finish();
+#ifdef DEBUG_LIB
+            printf("queue %d finished\n", queue_idx);
+#endif
             // copy 3 yolo layer out
             int size1 = config_list_all[58][2][19];
             int size2 = config_list_all[66][2][19];
             int size3 = config_list_all[74][2][19];
-#ifdef TIME
+            //===========================================//
+            //memcpy yolo layer input data from global memory offset
+            //===========================================//
+#ifdef DEBUG_LIB
+            time=what_time_is_it_now();
+#endif
             DATA_T * yolo1_pre_format = (DATA_T *)malloc(sizeof(DATA_T) * size1); 
             DATA_T * yolo2_pre_format = (DATA_T *)malloc(sizeof(DATA_T) * size2); 
             DATA_T * yolo3_pre_format = (DATA_T *)malloc(sizeof(DATA_T) * size3); 
-            time=what_time_is_it_now();
             memcpy(yolo1_pre_format, data_input[queue_idx].data() + config_list_all[58][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size1 * sizeof(DATA_T));
             memcpy(yolo2_pre_format, data_input[queue_idx].data() + config_list_all[66][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size2 * sizeof(DATA_T));
             memcpy(yolo3_pre_format, data_input[queue_idx].data() + config_list_all[74][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size3 * sizeof(DATA_T));
+#ifdef DEBUG_LIB
             printf("last layer memcpy out %f seconds.\n", what_time_is_it_now()-time); 
 #endif
 
-            // transform back the sequence
-#ifdef TIME
+            //===========================================//
+            //change data alignment for CPU process
+            //===========================================//
+#ifdef DEBUG_LIB
             time=what_time_is_it_now();
+#endif
             config_format[0] = 16;
             config_format[1] = 13;
-            config_format[2] = 256;
-            config_format[3] = 256;
+            config_format[2] = 80;
+            config_format[3] = 80;
             config_format[4] = PARALLEL_FILTER;
             data_format_transform_back(yolo1_pre_format, yolo1_pre, config_format);
             config_format[0] = 28;
             config_format[1] = 26;
-            config_format[2] = 256;
-            config_format[3] = 256;
+            config_format[2] = 80;
+            config_format[3] = 80;
             config_format[4] = PARALLEL_FILTER;
             data_format_transform_back(yolo2_pre_format, yolo2_pre, config_format);
             config_format[0] = 52;
             config_format[1] = 52;
-            config_format[2] = 256;
-            config_format[3] = 256;
+            config_format[2] = 80;
+            config_format[3] = 80;
             config_format[4] = PARALLEL_FILTER;
             data_format_transform_back(yolo3_pre_format, yolo3_pre, config_format);
+#ifdef DEBUG_LIB
             printf("data transform back %f seconds.\n", what_time_is_it_now()-time); 
 #endif
 
+#ifdef DEBUG_LIB
             // debug information
             printf("saving layer...\n");
             for(int layer_x = layer_min; layer_x < layer_max + 1; layer_x++){
@@ -253,50 +277,61 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
                 int data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*config_list_all[layer_x][2][7];
                 if(layer_x == 58){
                     org_layer = 81;// old layer
-                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*255;
+                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*75;
                 } else if(layer_x == 59){
                     org_layer = 85;// old layer
                 } else if(layer_x == 66){
                     org_layer = 93;// old layer
-                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*255;
+                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*75;
                 } else if(layer_x == 67){
                     org_layer = 97;// old layer
                 } else if(layer_x == 74){
                     org_layer = 105;// old layer
-                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*255;
+                    data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*75;
                 } else{
                     org_layer = index_conv[layer_x + 1] - 1;
                 }
                 //write_data_file(555, layer_x_out_format, config_list_all[layer_x][2][5]*config_list_all[layer_x][2][6]*config_list_all[layer_x][2][7]);//debug layer
                 write_data_file(org_layer, layer_x_out, data_size);//debug layer
             }
+#endif
         }
         if(frame_cnt < batch){
-#ifdef TIME
+            //===========================================//
+            //realign image data for accelerate
+            //===========================================//
+#ifdef DEBUG_LIB
             time=what_time_is_it_now();
 #endif
-            data_format_transform(input + frame_cnt * image_size, layer_0_in_format[0], config_format);
-#ifdef TIME
+            data_format_transform(input + frame_cnt * image_size, layer_0_in_format[queue_idx], config_format);
+#ifdef DEBUG_LIB
             printf("first layer data transform in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
+            //write_data_file(0, layer_0_in_format[queue_idx], config_list_all[layer_min][0][17]);//debug layer
+            //write_data_file(0, input, config_list_all[layer_min][0][17]);//debug layer
 
-#ifdef TIME
+            //===========================================//
+            //copy input data to alignment buffer
+            //===========================================//
+#ifdef DEBUG_LIB
             time=what_time_is_it_now();
 #endif
             memcpy(data_input[queue_idx].data() + config_list_all[layer_min][0][28]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, 
                     layer_0_in_format[0], 
                     config_list_all[layer_min][0][17] * sizeof(DATA_T));
-#ifdef TIME
+#ifdef DEBUG_LIB
             printf("first layer memcpy in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
         }
         if(frame_cnt < batch){
+            //===========================================//
             // copy buffer and execute kernel
-#ifdef TIME
+            //===========================================//
+#ifdef DEBUG_LIB
             time=what_time_is_it_now();
 #endif
             q[queue_idx]->enqueueMigrateMemObjects({*(buffer_input[queue_idx])}, 0);
-#ifdef TIME
+#ifdef DEBUG_LIB
             q[queue_idx]->finish();
             printf("migrate in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
@@ -307,11 +342,11 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             top_kernel->setArg(4, layer_min);
             top_kernel->setArg(5, layer_max);
             q[queue_idx]->enqueueTask(*top_kernel);
-#ifdef TIME
+#ifdef DEBUG_LIB
             time=what_time_is_it_now();
 #endif
             q[queue_idx]->enqueueMigrateMemObjects({*(buffer_input[queue_idx])}, CL_MIGRATE_MEM_OBJECT_HOST);
-#ifdef TIME
+#ifdef DEBUG_LIB
             q[queue_idx]->finish();
             printf("migrate out %f seconds.\n", what_time_is_it_now()-time); 
 #endif
@@ -320,12 +355,16 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     }
 }
 
+//===========================================//
+//write weight and bias data to pingpong queue
+//then write to global memory only once
+//===========================================//  
 int __merlin_load_weight(DATA_T *weights[75], int32_t bias[75][1024]) {
-//int __merlin_load_weight(DATA_T *weights[OUTPUT_LAYER_NUM], int32_t bias[OUTPUT_LAYER_NUM][1024]) {
     int layer_cnt = 0;
-    printf("library loading weight ");
+#ifdef DEBUG_LIB
+    printf("memcpy weight to alignment buffer\n");
+#endif
     for(layer_cnt = 0; layer_cnt < OUTPUT_LAYER_NUM; layer_cnt++){
-        printf("%d ", layer_cnt);
         for(int i=0; i<OVERLAP; i++) {
             // copy weight
             memcpy(w_in[i].data() + config_list_all[layer_cnt][0][30]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH,
@@ -335,58 +374,33 @@ int __merlin_load_weight(DATA_T *weights[75], int32_t bias[75][1024]) {
                    * config_list_all[layer_cnt][0][7] \
                    * sizeof(DATA_T));
             // copy bias
-            memcpy(w_in[i].data() + OUTPUT_LAYER_NUM * 1024 * 1024 + layer_cnt * 1024 * 4,
+            memcpy(w_in[i].data() + OUTPUT_LAYER_NUM * 1024 * 1024 + layer_cnt * 1024 * sizeof(BIAS_DT),
                    bias[layer_cnt],
-                   config_list_all[layer_cnt][0][7] * 4 * sizeof(float));
+                   config_list_all[layer_cnt][0][7] * sizeof(BIAS_DT));
         }
     }
-    printf("\n");
+#ifdef DEBUG_LIB
+    printf("transfer weight to global memory\n");
+#endif
     for(int i=0; i<OVERLAP; i++) {
         q[i]->enqueueMigrateMemObjects({*(buffer_weights[i])}, 0);
-        /*
-        //debug
         
+        //debug
+        /* 
         q[i]->finish();
         q[i]->enqueueMigrateMemObjects({*(buffer_weights[i])},
                                        CL_MIGRATE_MEM_OBJECT_HOST);
         q[i]->finish();
 
-        float bias_tmp[32];
+        BIAS_DT bias_tmp[32];
         memcpy(bias_tmp,
                w_in[0].data() + OUTPUT_LAYER_NUM * 1024 * 1024 ,
-               32 * sizeof(float));
+               32 * sizeof(BIAS_DT));
         for(int i=0; i<32; i++) {
-            printf("10 bias_in[%d]=%f\n", i, bias_tmp[i]);
+            printf("10 bias_in[%d]=%d\n", i, bias_tmp[i]);
         }
         */
         //debug
     }
     return 0;
 }
-/*
-
-    for(int i=0; i<OVERLAP; i++) {
-        q[i]->enqueueMigrateMemObjects({*(buffer_weights[i]),
-                                        *(buffer_config[i])},
-                                       0);
-        q[i]->finish();
-        q[i]->enqueueMigrateMemObjects({*(buffer_weights[i]),
-                                        *(buffer_config[i])},
-                                       CL_MIGRATE_MEM_OBJECT_HOST);
-        q[i]->finish();
-    }
-    DATA_T weights_tmp[65536];
-    memcpy(weights_tmp,
-        w_in[0].data(),
-           //+ config_list_all[1][0][30]*4,
-        65536 * sizeof(DATA_T));
-    for(int i=0; i<64; i++) {
-        printf("10 w_in[%d]=%f\n", i+2304, weights_tmp[i+2304]);
-    }
-    for(int i=0; i<64; i++) {
-        printf("11 w_in[%d]=%f\n", 4608+i, weights_tmp[4608+i]);
-    }
-    for(int i=0; i<64; i++) {
-        printf("12 w_in[%d]=%f\n", 2304+4608+i, weights_tmp[2304+4608+i]);
-    }
- */

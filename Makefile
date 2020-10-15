@@ -5,7 +5,7 @@ OPENMP=0
 DEBUG=0
 FPGA=1
 DEBUG_CPU=1
-TIME=1
+#DEBUG_FPGA=1
 
 ARCH= -gencode arch=compute_30,code=sm_30 \
       -gencode arch=compute_35,code=sm_35 \
@@ -69,7 +69,7 @@ KERNEL_SRC_FILES= ./hw/top_kernel_yolov3_int8_16x16.cpp
 
 EXE=yolov3_tiny__app
 ACC_EXE=$(EXE)_acc
-EXE_ARGS= detect cfg/yolov3.cfg yolov3.weights data/dog.jpg
+EXE_ARGS= detect cfg/yolov3_q.cfg yolov3_q.weights data/dog.jpg -thresh  0.2
 
 ATTRIBUTE  = -funsafe-math-optimizations
 ATTRIBUTE += --attribute coarse_grained_pipeline=off
@@ -86,8 +86,8 @@ ATTRIBUTE += --attribute memory_coalescing=off
 ATTRIBUTE += --vendor-options "-g"
 ATTRIBUTE += --attribute stream_prefetch=off
 
-N16_LINE:=104
-ONCHIP_SIZE:=13
+N16_LINE:=208
+ONCHIP_SIZE:=52
 N16_LINE_ATT = -DN16_LINE=$(N16_LINE)
 ONCHIP_SIZE_ATT = -DONCHIP_SIZE=$(ONCHIP_SIZE)
 
@@ -122,6 +122,9 @@ CMP_OPT+= -DDSP_PACK
 #CMP_OPT+= -DDEBUG_SHORTCUT
 #CMP_OPT+= -DDEBUG_UPSAMPLE
 #CMP_OPT+= -DDEBUG_DATAOUT
+
+COMMON+= -DDEBUG_FPGA
+CFLAGS+= -DDEBUG_FPGA
 endif
 
 CXX=xcpp
@@ -188,9 +191,13 @@ results:
 clean:
 	rm -rf $(OBJS) $(SLIB) $(ALIB) $(EXEC) $(EXECOBJ) $(OBJDIR)/*
 
+config_gen:
+	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
+
 acc:
-	python3 python/parse_cfg.py --cfg cfg/yolov3.cfg --N16xh $(N16_LINE)
+	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
 	merlincc -c $(KERNEL_SRC_FILES) -DXILINX -o $(KERNEL_NAME) $(CMP_OPT) --platform=$(DEVICE)
+
 runsim:
 	merlincc $(KERNEL_NAME).mco -march=sw_emu -D MCC_SIM -o kernel_top $(LNK_OPT) --platform=$(DEVICE)
 
@@ -217,6 +224,9 @@ runtest:
 run0:
 	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 0 0 0 16
 
+run58:
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 58 58 0 16
+
 run59:
 	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 59 59 0 16
 
@@ -232,3 +242,7 @@ testall:
 	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 70 70 0 16; \
 	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 0   0 0 16; \
 	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 1   1 0 16; 
+
+detect:
+	make
+	./$(EXEC) detect cfg/yolov3_q.cfg yolov3_q.weights data/dog.jpg -thresh  0.2 
