@@ -100,7 +100,7 @@ void gemm_nn_q(int M, int N, int K, float ALPHA,
         int8_t *B, int ldb,
         int32_t *C, int ldc)
 {
-    printf("M=%d K=%d N=%d\n", M, K, N);
+    //printf("M=%d K=%d N=%d\n", M, K, N);
     int i,j,k;
     #pragma omp parallel for
     for(i = 0; i < M; ++i){
@@ -201,7 +201,7 @@ void gemm_cpu_q(int TA, int TB, int M, int N, int K, float ALPHA,
         float BETA,
         int32_t *C, int ldc)
 {
-    printf("cpu: TA=%d TB=%d M=%d N=%d K=%d ALPHA=%f lda=%d ldb=%d BETA=%f ldc=%d\n",TA, TB, M, N, K, ALPHA, lda, ldb, BETA, ldc);
+    //printf("cpu: TA=%d TB=%d M=%d N=%d K=%d ALPHA=%f lda=%d ldb=%d BETA=%f ldc=%d\n",TA, TB, M, N, K, ALPHA, lda, ldb, BETA, ldc);
     int i, j;
     for(i = 0; i < M; ++i){
         for(j = 0; j < N; ++j){

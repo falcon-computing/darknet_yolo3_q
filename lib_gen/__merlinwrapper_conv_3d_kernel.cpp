@@ -198,15 +198,19 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     int flag = 0;
     int frame_cnt = 0;
     int queue_idx = 0;
+    int count1 = 0, count2 = 0, count3 = 0;
+//    printf("first layer %f seconds.\n", what_time_is_it_now()); 
     for(frame_cnt = 0; frame_cnt < batch + overlap; frame_cnt++){
         queue_idx = overlap == 1 ? 0 : flag % OVERLAP;
         if(frame_cnt >= overlap){
+//            printf("count1 = %d\n", count1); count1++;
             //===========================================//
             //wait queue to finish
             //ping wait last ping task to finish
             //pong wait last pong task to finish
             //===========================================//
             q[queue_idx]->finish();
+//            printf("layer %f seconds.\n", what_time_is_it_now()); 
 #ifdef DEBUG_LIB
             printf("queue %d finished\n", queue_idx);
 #endif
@@ -297,18 +301,20 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #endif
         }
         if(frame_cnt < batch){
+//            printf("count2 = %d\n", count2); count2++;
             //===========================================//
             //realign image data for accelerate
             //===========================================//
+            //write_data_file(202, input, config_list_all[layer_min][0][17]);//debug layer
 #ifdef DEBUG_LIB
             time=what_time_is_it_now();
 #endif
-            data_format_transform(input + frame_cnt * image_size, layer_0_in_format[queue_idx], config_format);
+            int offset = 0; //frame_cnt * image_size;
+            data_format_transform(input + offset, layer_0_in_format[queue_idx], config_format);
 #ifdef DEBUG_LIB
             printf("first layer data transform in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
-            //write_data_file(0, layer_0_in_format[queue_idx], config_list_all[layer_min][0][17]);//debug layer
-            //write_data_file(0, input, config_list_all[layer_min][0][17]);//debug layer
+            //write_data_file(203, layer_0_in_format[queue_idx], config_list_all[layer_min][0][17]);//debug layer
 
             //===========================================//
             //copy input data to alignment buffer
@@ -324,6 +330,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #endif
         }
         if(frame_cnt < batch){
+//            printf("count3 = %d\n", count3); count3++;
             //===========================================//
             // copy buffer and execute kernel
             //===========================================//
@@ -350,8 +357,8 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             q[queue_idx]->finish();
             printf("migrate out %f seconds.\n", what_time_is_it_now()-time); 
 #endif
-            flag++;
         }
+        flag++;
     }
 }
 

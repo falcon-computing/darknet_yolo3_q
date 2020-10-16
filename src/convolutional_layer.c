@@ -520,8 +520,8 @@ void forward_convolutional_layer(convolutional_layer l, network net)
         //l.output[i_q] = xilinx_quantizer(temp_sum[i_q], div_val);
         l.output[i_q] = xilinx_quantizer_shift(temp_sum[i_q], right_shift_cnt);
     }
-    for(j = 4900; j < 4910; ++j)
-        printf("[%d]:C_pre[%3d]=%3d q=%3d\n", conv_index, j, temp_sum[j], l.output[j]);
+//    for(j = 4900; j < 4910; ++j)
+//        printf("[%d]:C_pre[%3d]=%3d q=%3d\n", conv_index, j, temp_sum[j], l.output[j]);
 
     //activate_array(l.output, l.outputs*l.batch, l.activation);
     if (l.activation == LEAKY){
@@ -541,8 +541,8 @@ void forward_convolutional_layer(convolutional_layer l, network net)
         }
 
     }
-    for(j = 4900; j < 4910; ++j)
-        printf("[%d]:C[%3d]=%3d q=%3d\n", conv_index, j, temp_sum[j], l.output[j]);
+//    for(j = 4900; j < 4910; ++j)
+//        printf("[%d]:C[%3d]=%3d q=%3d\n", conv_index, j, temp_sum[j], l.output[j]);
     // else if (l.activation == LINEAR)
     // {
     //     for(i_q = 0; i_q < l.outputs; ++i_q){

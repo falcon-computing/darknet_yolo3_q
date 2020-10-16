@@ -35,6 +35,27 @@
 #define MAX_LINE 100
 //#define DEBUG_FPGA 1
 
+void write_data_file(int layer, DATA_T * value, int size) {
+    char file_name[] = "output_layerXXX.dat";
+    file_name[12] = layer/100 + '0';
+    file_name[13] = (layer%100)/10 + '0';
+    file_name[14] = (layer%100)%10 + '0';
+    printf("Output data name = %s\n", file_name);
+    // write file
+    FILE* fp2= fopen(file_name, "w+");
+    if (NULL == fp2) {
+        fclose(fp2);
+        //exit(1);
+    }
+    int i = 0;    
+    for(i=0; i<size; i++) {
+        fprintf(fp2, "%d\n", value[i]);
+    }
+    fclose(fp2);
+    //exit(1);
+}
+
+
 void get_bias_data(layer l, int32_t * bias_array) {
     int i = 0;
     for(i = 0; i < l.n; i++) {
@@ -285,6 +306,7 @@ network *make_network(int n)
 
 void forward_network(network *netp)
 {
+#define OUTPUT_REF
 #ifdef GPU
     if(netp->gpu_index >= 0){
         forward_network_gpu(netp);   
@@ -439,6 +461,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
     for(m = 0; m < l0.inputs; m++){
         layer_0_in[m] = net.input[m];
     }
+    //write_data_file(300, layer_0_in, l0.inputs);//debug layer  
     
     //===========================================//
     //loading weight and bias to global memory, only need once for different images
@@ -476,9 +499,9 @@ void forward_network_fpga(network *netp, int * test_cfg)
     int i_h = config_list_all[new_layer_x][0][2];
     int i_c = config_list_all[new_layer_x][0][3];
     int data_size = i_w * i_h * i_c;
-    #ifdef DEBUG_FPGA
+//    #ifdef DEBUG_FPGA
     printf("debug_layer:%d, old layer:%d, data_size:%d\n", new_layer_x, old_layer_x, data_size);
-    #endif
+//    #endif
 
     DATA_T * layer_x_in = malloc(sizeof(DATA_T)*data_size);
     read_data_file(old_layer_x, layer_x_in);
@@ -496,6 +519,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
             }
         }
     }
+//    write_data_file(301, layer_x_in, l0.inputs);//debug layer  
     #endif // DEBUG_SIM
     #endif
     
@@ -505,10 +529,11 @@ void forward_network_fpga(network *netp, int * test_cfg)
     //===========================================//
     #ifdef DEBUG_FPGA
     printf("detecting\n");
+    #endif
     struct timeval tv_start, tv_end;
     double exe_time;
     gettimeofday(&tv_start, NULL);
-    #endif
+//    write_data_file(302, layer_0_in, l0.inputs);//debug layer  
     #if FPGA == 1
     #ifdef DEBUG_CPU
     __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_pre, yolo2_pre, yolo3_pre, 1, debug_config);
@@ -520,15 +545,15 @@ void forward_network_fpga(network *netp, int * test_cfg)
     debug_config[3] = 74;
     debug_config[4] = 0;
     debug_config[5] = 0;
-    __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_pre, yolo2_pre, yolo3_pre, 1, debug_config);
+    __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_pre, yolo2_pre, yolo3_pre, 10, debug_config);
     #endif // DEBUG_CPU
     #endif
     #ifdef DEBUG_FPGA
     printf("finish opencl kernel\n");
+    #endif
     gettimeofday(&tv_end, NULL);
     exe_time = (tv_end.tv_sec - tv_start.tv_sec) * 1000.0 + (tv_end.tv_usec - tv_start.tv_usec)/1000.0;                
     printf("E2E time %f \n",exe_time);
-    #endif
     
     //===========================================//
     //get output data from global memory, and do yolo layer in CPU
@@ -856,11 +881,13 @@ float *network_predict_fpga(network *net, float *input, int * test_cfg)
     double time;
     time=what_time_is_it_now();
     #endif
+//    write_data_file(1, net->input , net->inputs);//debug layer  
     for (i_q = 0; i_q < net->inputs; ++i_q)
     {
         net->input[i_q] = xilinx_quantizer_shift(round(input[i_q] * 64), 0);
         //net->input[i_q] = round(input[i_q] * 64);
     }
+//    write_data_file(0, net->input , net->inputs);//debug layer  
     #ifdef DEBUG_FPGA
     printf("first layer quantize in %f seconds.\n", what_time_is_it_now()-time); 
     #endif
@@ -882,11 +909,13 @@ float *network_predict(network *net, float *input)
     network orig = *net;
     // net->input = input;
     int i_q;
+    //write_data_file_int8_input(1, net->input , net->inputs);//debug layer  
     for (i_q = 0; i_q < net->inputs; ++i_q)
     {
         net->input[i_q] = xilinx_quantizer_shift(round(input[i_q] * 64), 0);
         //net->input[i_q] = round(input[i_q] * 64);
     }
+    //write_data_file_int8_input(0, net->input , net->inputs);//debug layer  
     int sum_aq = sum_f(net->input, net->inputs);
     
     net->truth = 0;
