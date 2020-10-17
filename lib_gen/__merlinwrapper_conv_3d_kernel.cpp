@@ -350,6 +350,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             top_kernel->setArg(5, layer_max);
             q[queue_idx]->enqueueTask(*top_kernel);
 #ifdef DEBUG_LIB
+            q[queue_idx]->finish();
             time=what_time_is_it_now();
 #endif
             q[queue_idx]->enqueueMigrateMemObjects({*(buffer_input[queue_idx])}, CL_MIGRATE_MEM_OBJECT_HOST);

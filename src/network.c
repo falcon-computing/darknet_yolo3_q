@@ -545,7 +545,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
     debug_config[3] = 74;
     debug_config[4] = 0;
     debug_config[5] = 0;
-    __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_pre, yolo2_pre, yolo3_pre, 10, debug_config);
+    __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_pre, yolo2_pre, yolo3_pre, 1, debug_config);
     #endif // DEBUG_CPU
     #endif
     #ifdef DEBUG_FPGA
@@ -558,9 +558,13 @@ void forward_network_fpga(network *netp, int * test_cfg)
     //===========================================//
     //get output data from global memory, and do yolo layer in CPU
     //===========================================//
+    int i_q;
     { //yolo1
         layer l = net.layers[82];
-        yolo_layer_q(l, net, yolo1_pre);
+        float* yolo_out = calloc(l.outputs * l.batch, sizeof(float)); 
+        yolo_layer_q(yolo1_pre, yolo_out, l.outputs, l.w*l.h);
+        for(i_q = 0; i_q < l.outputs;  ++ i_q) 
+            l.yolo_out[i_q] = yolo_out[i_q];
         #ifdef DEBUG_FPGA
         write_data_file_float(82, l.yolo_out, l.outputs);
         printf("finish yolo-1\n");
@@ -568,7 +572,10 @@ void forward_network_fpga(network *netp, int * test_cfg)
     }
     { //yolo2
         layer l = net.layers[94];
-        yolo_layer_q(l, net, yolo2_pre);
+        float* yolo_out = calloc(l.outputs * l.batch, sizeof(float)); 
+        yolo_layer_q(yolo2_pre, yolo_out, l.outputs, l.w*l.h);
+        for(i_q = 0; i_q < l.outputs;  ++ i_q) 
+            l.yolo_out[i_q] = yolo_out[i_q];
         #ifdef DEBUG_FPGA
         write_data_file_float(94, l.yolo_out, l.outputs);
         printf("finish yolo-2\n");
@@ -576,7 +583,10 @@ void forward_network_fpga(network *netp, int * test_cfg)
     }
     { //yolo3
         layer l = net.layers[106];
-        yolo_layer_q(l, net, yolo3_pre);
+        float* yolo_out = calloc(l.outputs * l.batch, sizeof(float)); 
+        yolo_layer_q(yolo3_pre, yolo_out, l.outputs, l.w*l.h);
+        for(i_q = 0; i_q < l.outputs;  ++ i_q) 
+            l.yolo_out[i_q] = yolo_out[i_q];
         #ifdef DEBUG_FPGA
         write_data_file_float(106, l.yolo_out, l.outputs);
         printf("finish yolo-3\n");
