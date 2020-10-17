@@ -9,6 +9,57 @@
 #include "time.h"
 #include <sys/time.h>
 //#define DEBUG_LIB
+
+void write_data_file_float(int layer, float * value, int size) {
+    char file_name[] = "output_layerXXX.dat";
+    file_name[12] = layer/100 + '0';
+    file_name[13] = (layer%100)/10 + '0';
+    file_name[14] = (layer%100)%10 + '0';
+    printf("Output data name = %s\n", file_name);
+    // write file
+    FILE* fp2= fopen(file_name, "w+");
+    if (NULL == fp2) {
+        fclose(fp2);
+        //exit(1);
+    }
+    int i = 0;
+    for(i=0; i<size; i++) {
+        fprintf(fp2, "%f\n", value[i]);
+    }
+    fclose(fp2);
+    //exit(1);
+}
+
+int entry_index_s(int location, int entry, int size, int classes)
+{
+    int n =   location / size;
+    int loc = location % size;
+    return n*size*(4+classes+1) + entry*size + loc;
+}
+
+void activate_array_s(float *x, const int n)
+{
+    int i;
+    for(i = 0; i < n; ++i){
+        x[i] = 1./(1. + exp(-x[i]));
+    }
+}
+
+void yolo_layer_q(int8_t *input, float *yolo_out, int outputs, int size) {
+    int i,j,t,n,i_q;
+    int classes = 20;
+    int n_max = 3;
+//    printf("outputs=%d, n=%d, size=%d, classes=%d\n", outputs, n_max, size, classes);
+    for(i_q = 0; i_q < outputs;  ++ i_q) 
+        yolo_out[i_q] = input[i_q] / 4.0;
+    for(n = 0; n < n_max; ++n){
+        int index = entry_index_s(n*size, 0, size, classes);
+        activate_array_s(yolo_out + index, 2*size);
+        index = entry_index_s(n*size, 4, size, classes);
+        activate_array_s(yolo_out + index, (1+classes)*size);
+    }
+}
+
 double what_time_is_it_now()
 {
     struct timeval time;
@@ -160,7 +211,7 @@ void write_data_file(int layer, DATA_T * value, int size) {
 //when ping do computing, pong do data transfor and some other data processes
 //===========================================//  
 int __merlin_exec_top_kernel_overlap(DATA_T * input,
-                                     DATA_T * yolo1_pre, DATA_T * yolo2_pre, DATA_T * yolo3_pre,
+                                     float * yolo1_out, float * yolo2_out, float * yolo3_out,
                                      int batch,
                                      int * debug_config)
 {
@@ -177,7 +228,6 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     printf("input index:%d\n", config_list_all[layer_min][0][28]);
     printf("w:%d, h:%d, c:%d\n", config_list_all[layer_min][0][1], config_list_all[layer_min][0][2], layer_c);
 #endif
-
 
     int config_format[5];
     config_format[0] = config_list_all[layer_min][0][1];
@@ -198,12 +248,10 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     int flag = 0;
     int frame_cnt = 0;
     int queue_idx = 0;
-    int count1 = 0, count2 = 0, count3 = 0;
 //    printf("first layer %f seconds.\n", what_time_is_it_now()); 
     for(frame_cnt = 0; frame_cnt < batch + overlap; frame_cnt++){
         queue_idx = overlap == 1 ? 0 : flag % OVERLAP;
         if(frame_cnt >= overlap){
-//            printf("count1 = %d\n", count1); count1++;
             //===========================================//
             //wait queue to finish
             //ping wait last ping task to finish
@@ -240,6 +288,9 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #ifdef DEBUG_LIB
             time=what_time_is_it_now();
 #endif
+            DATA_T * yolo1_pre = (DATA_T *)malloc(sizeof(DATA_T) * config_list_all[58][2][8] * config_list_all[58][2][6] * config_list_all[58][2][7]);
+            DATA_T * yolo2_pre = (DATA_T *)malloc(sizeof(DATA_T) * config_list_all[66][2][8] * config_list_all[66][2][6] * config_list_all[66][2][7]);
+            DATA_T * yolo3_pre = (DATA_T *)malloc(sizeof(DATA_T) * config_list_all[74][2][8] * config_list_all[74][2][6] * config_list_all[74][2][7]);
             config_format[0] = 16;
             config_format[1] = 13;
             config_format[2] = 80;
@@ -260,6 +311,26 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             data_format_transform_back(yolo3_pre_format, yolo3_pre, config_format);
 #ifdef DEBUG_LIB
             printf("data transform back %f seconds.\n", what_time_is_it_now()-time); 
+#endif
+            //===========================================//
+            //run yolo layer
+            //===========================================//
+#ifdef DEBUG_LIB
+            time=what_time_is_it_now();
+#endif
+            yolo_layer_q(yolo1_pre, yolo1_out, 12675,  13*13);
+            yolo_layer_q(yolo2_pre, yolo2_out, 50700,  26*26);
+            yolo_layer_q(yolo3_pre, yolo3_out, 202800, 52*52);
+#ifdef DEBUG_LIB
+            printf("3 yolos in %f seconds.\n", what_time_is_it_now()-time); 
+#endif
+#ifdef DEBUG_LIB
+            write_data_file_float(82,  yolo1_out, 12675);
+            write_data_file_float(94,  yolo2_out, 50700);
+            write_data_file_float(106, yolo3_out, 202800);
+            printf("finish yolo-1\n");
+            printf("finish yolo-2\n");
+            printf("finish yolo-3\n");
 #endif
 
 #ifdef DEBUG_LIB
@@ -301,7 +372,6 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #endif
         }
         if(frame_cnt < batch){
-//            printf("count2 = %d\n", count2); count2++;
             //===========================================//
             //realign image data for accelerate
             //===========================================//
@@ -330,7 +400,6 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #endif
         }
         if(frame_cnt < batch){
-//            printf("count3 = %d\n", count3); count3++;
             //===========================================//
             // copy buffer and execute kernel
             //===========================================//

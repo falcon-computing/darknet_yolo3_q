@@ -346,6 +346,7 @@ void forward_network(network *netp)
 
 void forward_network_fpga(network *netp, int * test_cfg)
 {
+    int batch = 1;
     int layer_min = test_cfg[0];
     int layer_max = test_cfg[1];
     int debug_layer = test_cfg[2];
@@ -355,10 +356,10 @@ void forward_network_fpga(network *netp, int * test_cfg)
     printf("testing cfg = %d %d %d %d\n", layer_min, layer_max, debug_layer, cfg_filter);
     #endif
     network net = *netp;
-    DATA_T * layer_0_in = malloc(sizeof(DATA_T)*416*416*3);
-    DATA_T * yolo1_pre = malloc(sizeof(DATA_T) * config_list_all[58][2][8] * config_list_all[58][2][6] * config_list_all[58][2][7]);
-    DATA_T * yolo2_pre = malloc(sizeof(DATA_T) * config_list_all[66][2][8] * config_list_all[66][2][6] * config_list_all[66][2][7]);
-    DATA_T * yolo3_pre = malloc(sizeof(DATA_T) * config_list_all[74][2][8] * config_list_all[74][2][6] * config_list_all[74][2][7]);
+    DATA_T * layer_0_in = malloc(sizeof(DATA_T)*416*416*3*batch);
+    float* yolo1_out = calloc(12675, sizeof(float)); 
+    float* yolo2_out = calloc(50700, sizeof(float)); 
+    float* yolo3_out = calloc(202800, sizeof(float)); 
     
     //===========================================//
     //get bias data
@@ -536,7 +537,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
 //    write_data_file(302, layer_0_in, l0.inputs);//debug layer  
     #if FPGA == 1
     #ifdef DEBUG_CPU
-    __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_pre, yolo2_pre, yolo3_pre, 1, debug_config);
+    __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_out, yolo2_out, yolo3_out, 1, debug_config);
     //exit(1);
     #else
     debug_config[0] = 0;
@@ -545,7 +546,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
     debug_config[3] = 74;
     debug_config[4] = 0;
     debug_config[5] = 0;
-    __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_pre, yolo2_pre, yolo3_pre, 1, debug_config);
+    __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_out, yolo2_out, yolo3_out, batch, debug_config);
     #endif // DEBUG_CPU
     #endif
     #ifdef DEBUG_FPGA
@@ -556,41 +557,23 @@ void forward_network_fpga(network *netp, int * test_cfg)
     printf("E2E time %f \n",exe_time);
     
     //===========================================//
-    //get output data from global memory, and do yolo layer in CPU
+    //get yolo data to original data structure
     //===========================================//
     int i_q;
     { //yolo1
         layer l = net.layers[82];
-        float* yolo_out = calloc(l.outputs * l.batch, sizeof(float)); 
-        yolo_layer_q(yolo1_pre, yolo_out, l.outputs, l.w*l.h);
         for(i_q = 0; i_q < l.outputs;  ++ i_q) 
-            l.yolo_out[i_q] = yolo_out[i_q];
-        #ifdef DEBUG_FPGA
-        write_data_file_float(82, l.yolo_out, l.outputs);
-        printf("finish yolo-1\n");
-        #endif
+            l.yolo_out[i_q] = yolo1_out[i_q];
     }
     { //yolo2
         layer l = net.layers[94];
-        float* yolo_out = calloc(l.outputs * l.batch, sizeof(float)); 
-        yolo_layer_q(yolo2_pre, yolo_out, l.outputs, l.w*l.h);
         for(i_q = 0; i_q < l.outputs;  ++ i_q) 
-            l.yolo_out[i_q] = yolo_out[i_q];
-        #ifdef DEBUG_FPGA
-        write_data_file_float(94, l.yolo_out, l.outputs);
-        printf("finish yolo-2\n");
-        #endif
+            l.yolo_out[i_q] = yolo2_out[i_q];
     }
     { //yolo3
         layer l = net.layers[106];
-        float* yolo_out = calloc(l.outputs * l.batch, sizeof(float)); 
-        yolo_layer_q(yolo3_pre, yolo_out, l.outputs, l.w*l.h);
         for(i_q = 0; i_q < l.outputs;  ++ i_q) 
-            l.yolo_out[i_q] = yolo_out[i_q];
-        #ifdef DEBUG_FPGA
-        write_data_file_float(106, l.yolo_out, l.outputs);
-        printf("finish yolo-3\n");
-        #endif
+            l.yolo_out[i_q] = yolo3_out[i_q];
     }
     calc_network_cost(netp);
 }
