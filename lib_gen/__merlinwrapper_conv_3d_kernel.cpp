@@ -318,6 +318,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #ifdef DEBUG_LIB
             time=what_time_is_it_now();
 #endif
+            //TODO: in batch mode, it need to add offset for yolo outs
             yolo_layer_q(yolo1_pre, yolo1_out, 12675,  13*13);
             yolo_layer_q(yolo2_pre, yolo2_out, 50700,  26*26);
             yolo_layer_q(yolo3_pre, yolo3_out, 202800, 52*52);
@@ -379,6 +380,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #ifdef DEBUG_LIB
             time=what_time_is_it_now();
 #endif
+            //TODO: in batch mode, it need to add offset for input images
             int offset = 0; //frame_cnt * image_size;
             data_format_transform(input + offset, layer_0_in_format[queue_idx], config_format);
 #ifdef DEBUG_LIB

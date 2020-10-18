@@ -357,9 +357,9 @@ void forward_network_fpga(network *netp, int * test_cfg)
     #endif
     network net = *netp;
     DATA_T * layer_0_in = malloc(sizeof(DATA_T)*416*416*3*batch);
-    float* yolo1_out = calloc(12675, sizeof(float)); 
-    float* yolo2_out = calloc(50700, sizeof(float)); 
-    float* yolo3_out = calloc(202800, sizeof(float)); 
+    float* yolo1_out = calloc(12675*batch, sizeof(float)); 
+    float* yolo2_out = calloc(50700*batch, sizeof(float)); 
+    float* yolo3_out = calloc(202800*batch, sizeof(float)); 
     
     //===========================================//
     //get bias data
@@ -457,10 +457,13 @@ void forward_network_fpga(network *netp, int * test_cfg)
     #endif
 
     //layer 0 input data
+    //TODO: in batch mode, it need to add offset for input images
     net.index = 0;
     layer l0 = net.layers[0];
-    for(m = 0; m < l0.inputs; m++){
-        layer_0_in[m] = net.input[m];
+    for(p = 0; p < batch; p++){
+        for(m = 0; m < l0.inputs; m++){
+            layer_0_in[m] = net.input[m];
+        }
     }
     //write_data_file(300, layer_0_in, l0.inputs);//debug layer  
     
