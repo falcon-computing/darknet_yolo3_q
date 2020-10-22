@@ -376,7 +376,6 @@ class NetworkParser:
                 #25 loop_bound
                 sub_list[25] = int(sub_list[5] * sub_list[6] * sub_list[7] / PARALLEL_FILTER / sub_list[24])
                 sub_list[26] = sub_list[1] * sub_list[20]
-                sub_list[27] = int((sub_list[2] + sub_list[20] - 1 + sub_list[9] - 1) / (sub_list[20] + sub_list[9] - 1))
                 sub_list[28] = global_in_offset
                 sub_list[29] = global_out_offset
                 # set shortcut adder address

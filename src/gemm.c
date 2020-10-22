@@ -100,16 +100,21 @@ void gemm_nn_q(int M, int N, int K, float ALPHA,
         int8_t *B, int ldb,
         int32_t *C, int ldc)
 {
-    printf("M=%d K=%d N=%d\n", M, K, N);
+    //printf("M=%d K=%d N=%d\n", M, K, N);
+    //int  flag = M == 256 && K == 1152 && N == 52*52;
     int i,j,k;
     #pragma omp parallel for
     for(i = 0; i < M; ++i){
         for(k = 0; k < K; ++k){
             register float A_PART = ALPHA*A[i*lda+k];
             for(j = 0; j < N; ++j){
+                //if(flag == 1 && i>95 && i <98)
+                //printf("[%3d][%3d][%3d] C[%3d] + (%3.2f) * (%3d) = ", i,k,j, C[i*ldc+j], A_PART, B[k*ldb+j]);
                 C[i*ldc+j] += A_PART*B[k*ldb+j];
-                //if(j < 10) printf("[%d](%f)*(%d)=(%d)  ", j, A_PART, B[k*ldb+j], C[i*ldc+j]);
+                //if(flag == 1&& i>95 && i <98)
+                //printf("(%d)\n",C[i*ldc+j]);
             }
+            //if(flag == 1&& i>95 && i <98)
             //printf("\n");
         }
     }

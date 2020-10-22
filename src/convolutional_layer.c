@@ -500,7 +500,11 @@ void forward_convolutional_layer(convolutional_layer l, network net)
             int xl =0;
         }
     }
-    
+   
+    //if(conv_index == 10){
+    //for(j = 262288; j < 262288+10; ++j)
+    //    printf("[%d]:Conv[%3d]=%3d\n", conv_index, j, temp_sum[j]);
+    //}
 
     if(l.batch_normalize){
         forward_batchnorm_layer(l, net);
@@ -520,9 +524,10 @@ void forward_convolutional_layer(convolutional_layer l, network net)
         //l.output[i_q] = xilinx_quantizer(temp_sum[i_q], div_val);
         l.output[i_q] = xilinx_quantizer_shift(temp_sum[i_q], right_shift_cnt);
     }
-    for(j = 4900; j < 4910; ++j)
-        printf("[%d]:C_pre[%3d]=%3d q=%3d\n", conv_index, j, temp_sum[j], l.output[j]);
-
+    //if(conv_index == 10){
+    //for(j = 262288; j < 262288 + 10; ++j)
+    //    printf("[%d]:C_pre[%3d]=%3d q=%3d\n", conv_index, j, temp_sum[j], l.output[j]);
+    //}
     //activate_array(l.output, l.outputs*l.batch, l.activation);
     if (l.activation == LEAKY){
         for(i_q = 0; i_q < l.outputs; ++i_q){
@@ -535,14 +540,16 @@ void forward_convolutional_layer(convolutional_layer l, network net)
                 l.output[i_q] = xilinx_quantizer_shift(curr_activation, 10);
             }
             else{
-               double curr_activation = l.output[i_q];
+                int32_t curr_activation = l.output[i_q];
                  l.output[i_q] = xilinx_quantizer_shift(curr_activation,0);
              }
         }
 
     }
-    for(j = 4900; j < 4910; ++j)
-        printf("[%d]:C[%3d]=%3d q=%3d\n", conv_index, j, temp_sum[j], l.output[j]);
+    //if(conv_index == 10){
+    //for(j = 262288; j < 262288 + 10; ++j)
+    //    printf("[%d]:C[%3d]=%3d q=%3d\n", conv_index, j, temp_sum[j], l.output[j]);
+    //}
     // else if (l.activation == LINEAR)
     // {
     //     for(i_q = 0; i_q < l.outputs; ++i_q){

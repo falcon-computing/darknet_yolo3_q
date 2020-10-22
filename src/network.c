@@ -293,6 +293,7 @@ void forward_network(network *netp)
     network net = *netp;
     int i;
     for(i = 0; i < net.n; ++i){
+        printf("layer_%d\n",i);
         net.index = i;
         layer l = net.layers[i];
         if(l.delta){
@@ -463,6 +464,20 @@ void forward_network_fpga(network *netp, int * test_cfg)
 
     DATA_T * layer_x_in = malloc(sizeof(DATA_T)*data_size);
     read_data_file(old_layer_x, layer_x_in);
+    
+    DATA_T * layer_debug_format = malloc(sizeof(DATA_T)*52*52*256);
+    DATA_T * layer_debug = malloc(sizeof(DATA_T)*52*52*256);
+    //read_data_file(555, layer_debug_format);
+    config_format[0] = 52;
+    config_format[1] = 52;
+    config_format[2] = 256;
+    config_format[3] = 256;
+    config_format[4] = PARALLEL_FILTER;
+    //data_format_transform_back(layer_debug_format, layer_debug, config_format);
+    //write_data_file_int8_input(666, layer_debug, 52*52*256);
+    
+    
+    
     #ifdef DEBUG_SIM
     int l_c = net.layers[old_layer_x].c;
     int l_n = net.layers[old_layer_x].n;
