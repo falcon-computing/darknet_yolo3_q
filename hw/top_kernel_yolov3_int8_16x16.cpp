@@ -219,8 +219,8 @@ void stream_in_image(
     class ap_int< WIDE_BUS_WIDTH > buf_pang_in_image[26*28/2*512*8/512];
     #elif ONCHIP_SIZE == 52
     bool flag_onchip = (in_h == 13 || in_h == 26 || in_h == 52);
-    class ap_int< WIDE_BUS_WIDTH > buf_ping_in_image[52*52/2*256*8/512];
-    class ap_int< WIDE_BUS_WIDTH > buf_pang_in_image[52*52/2*256*8/512];
+    class ap_int< WIDE_BUS_WIDTH > buf_ping_in_image[52*52/2*384*8/512];
+    class ap_int< WIDE_BUS_WIDTH > buf_pang_in_image[52*52/2*384*8/512];
     #else
     ap_int< WIDE_BUS_WIDTH > buf_ping_in_image[(SPLITING_FACTOR+2)*416*PARALLEL_FILTER*ORG_DATA_WIDTH/WIDE_BUS_WIDTH];
     ap_int< WIDE_BUS_WIDTH > buf_pang_in_image[(SPLITING_FACTOR+2)*416*PARALLEL_FILTER*ORG_DATA_WIDTH/WIDE_BUS_WIDTH];
