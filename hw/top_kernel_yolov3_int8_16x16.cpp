@@ -219,8 +219,8 @@ void stream_in_image(
     class ap_int< WIDE_BUS_WIDTH > buf_pang_in_image[26*28/2*512*8/512];
     #elif ONCHIP_SIZE == 52
     bool flag_onchip = (in_h == 13 || in_h == 26 || in_h == 52);
-    class ap_int< WIDE_BUS_WIDTH > buf_ping_in_image[52*52/2*256*8/512];
-    class ap_int< WIDE_BUS_WIDTH > buf_pang_in_image[52*52/2*256*8/512];
+    class ap_int< WIDE_BUS_WIDTH > buf_ping_in_image[52*52/2*384*8/512];
+    class ap_int< WIDE_BUS_WIDTH > buf_pang_in_image[52*52/2*384*8/512];
     #else
     ap_int< WIDE_BUS_WIDTH > buf_ping_in_image[(SPLITING_FACTOR+2)*416*PARALLEL_FILTER*ORG_DATA_WIDTH/WIDE_BUS_WIDTH];
     ap_int< WIDE_BUS_WIDTH > buf_pang_in_image[(SPLITING_FACTOR+2)*416*PARALLEL_FILTER*ORG_DATA_WIDTH/WIDE_BUS_WIDTH];
@@ -1078,7 +1078,7 @@ void compute_one_cube(
             shift_reg(shift, line_buffer, stream_shift_in, stride, size, w);
             
 #ifdef DEBUG_CONV
-            printf("count:%3d %3d\n", w, (in_w + pad - stride + 1)/stride);
+            printf("count:%3d %3d %3d\n", h, w, (in_w + pad - stride + 1)/stride);
 #endif
             //if (w >= size - pad - stride && w < (in_w + pad - stride + 1)/stride) {
             if (w >= size - pad - stride) {
@@ -1088,6 +1088,9 @@ void compute_one_cube(
                 #else
                 for(int p = 0; p < PARALLEL_FILTER; p++) {
                 #endif
+#ifdef DEBUG_CONV
+                    printf("p:%3d\n", p);
+#endif
                     conv_3x3_core(shift, weights_in[p], stream_sum_out[p], size);
                 }
             }
@@ -1105,14 +1108,10 @@ void adder_out(
     hls::stream< IMAGE_4DT > stream_data_in[PARALLEL_FILTER], 
     #endif
     hls::stream< CONV_DT > stream_data_out[PARALLEL_FILTER], 
+    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416],
     int z, int s, int in_w, int in_c, int size, int stride, int pad, int new_h,
     int h_col, int w_col)
 {
-    #ifdef DSP_PACK
-    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
-    #else
-    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
-    #endif
 
     //int h_col = (new_h + 2 * pad - size) / stride + 1;
     //int w_col = (in_w + 2 * pad - size) / stride + 1;
@@ -1161,29 +1160,30 @@ void adder_out(
                 stream_data_out[p] . write(buf0_output);
                 #endif
 #ifdef DEBUG_CONV
-                if(p == 0){
-                    #ifdef DSP_PACK
-                    printf("conv_sum[%3d][%3d] = (%3d, %3d) ", i / w_col, i % w_col, (buf0_output . to_int()), (buf1_output . to_int()));
-                    #else
-                    printf("conv_sum[%3d][%3d] = %3d ", i / w_col, i % w_col, (buf0_output . to_int()));
-                    #endif
-                    if (i % w_col == w_col - 1) {
-                        printf("\n");
-                    }
+                #ifdef DSP_PACK
+                printf("conv_sum[%3d][%3d] = (%3d, %3d) ", i / w_col, i % w_col, (buf0_output . to_int()), (buf1_output . to_int()));
+                #else
+                printf("conv_sum[%3d][%3d] = %3d ", i / w_col, i % w_col, (buf0_output . to_int()));
+                #endif
                 }
 #endif
             }
 #ifdef DEBUG_CONV
             else {
-                if(p == 0){
-                    printf("conv_sum_tmp[%3d][%3d] = %3d ", i / w_col, i % w_col, (conv_sum[0][i] . to_int()));
-                    if (i % w_col == w_col - 1) {
-                        printf("\n");
-                    }
+                CONV_DT buf0_output = conv_sum[p*2+0][i];
+                CONV_DT buf1_output = conv_sum[p*2+1][i];
+                #ifdef DSP_PACK
+                printf("[p%d] conv_sum_tmp[%3d][%3d] = (%3d, %3d) ", p,i / w_col, i % w_col, (buf0_output . to_int()), (buf1_output . to_int()));
+                #else
+                printf("[p%d] conv_sum_tmp[%3d][%3d] = %3d ", p, i / w_col, i % w_col, (buf0_output . to_int()));
+                #endif
                 }
             }
 #endif
         }
+#ifdef DEBUG_CONV
+    printf("\n");
+#endif
     }
 #ifdef DEBUG_CONV
     printf("finish_adder_out \n");
@@ -1229,10 +1229,11 @@ void conv_3x3_cuboid(
     hls::stream< IMAGE_4DT > stream_sum_out[PARALLEL_FILTER];
     #endif
     #pragma HLS stream variable = stream_sum_out depth = 512
+    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
     #pragma HLS dataflow
     shift_in_data(stream_in_ping, stream_in_pang, stream_shift_in, flag_fifo, z, in_w, in_h, split_h, size, stride, pad, new_h, loop_1, loop_2);
     compute_one_cube(line_buffer, weights_in, stream_shift_in, stream_sum_out, z, in_w, in_h, size, stride, pad, new_h, loop_1, loop_3);
-    adder_out(stream_sum_out, stream_out, z, s, in_w, in_c, size, stride, pad, new_h,h_col, w_col);
+    adder_out(stream_sum_out, stream_out, conv_sum,z, s, in_w, in_c, size, stride, pad, new_h,h_col, w_col);
 }
 
 void conv_3x3_stream(
@@ -1364,7 +1365,7 @@ void bias_stream(
                     }
                     tmp_a[p] = sum2;
 #ifdef DEBUG_BIAS
-                    printf("debug_bias_data[%d] : bias[%3d] + in[%3d] = [%3d] -> q[%3d] -> act[%3d] ",i, biases[p].to_int(), input_buf.to_int(), sum0.to_int(), sum1.to_int(), sum2.to_int());
+                    printf("[p%2d]debug_bias_data[%d] : bias[%3d] + in[%3d] = [%3d] -> q[%3d] -> act[%3d] ",p,i, biases[p].to_int(), input_buf.to_int(), sum0.to_int(), sum1.to_int(), sum2.to_int());
 #endif
                 }
 #ifdef DEBUG_BIAS
@@ -1425,18 +1426,13 @@ void shortcut_core(
                 IMAGE_4DT tmp_o = (tmp_o1 + tmp_o2);
                 IMAGE_DT sum1 = xilinx_quantizer_shift(tmp_o, right_shift_cnt2);
                 tmp_a[p] = sum1;
+#ifdef DEBUG_SHORTCUT
+                printf("[p%d]shortcut_data[%4d]:(%3d->%3d) + (%3d->%3d) ", p, i*4+f,(tmp_buf1 . to_int()),(tmp_o1 . to_int()),(tmp_buf2 . to_int()),(tmp_o2 . to_int()));
+                printf(" =  (%3d->%3d)\n", (tmp_o . to_int()),(sum1 . to_int()));
+#endif
             }
             ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > output_buf = ((((((((((((((((tmp_a[15] , tmp_a[14] , tmp_a[13])) , tmp_a[12] , tmp_a[11])) , tmp_a[10] , tmp_a[9])) , tmp_a[8] , tmp_a[7])) , tmp_a[6] , tmp_a[5])) , tmp_a[4] , tmp_a[3])) , tmp_a[2] , tmp_a[1])) , tmp_a[0]));
             stream_output . write(output_buf);
-#ifdef debug_shortcut
-            ap_int< 8 > tmp_buf1 = (input_buf1(((0 + 1) * 8 - 1), (0 * 8)));
-            ap_int< 8 > tmp_buf2 = (input_buf2(((0 + 1) * 8 - 1), (0 * 8)));
-            ap_int< 8 > tmp_buf3 = (output_buf(((0 + 1) * 8 - 1), (0 * 8)));
-            printf("shortcut_data[%4d]:%d + %d = %d ", t,(tmp_buf1 . to_int()),(tmp_buf2 . to_int()),(tmp_buf3 . to_int()));
-            if ((i * FACTORS + f) % in_w == in_w - 1) {
-                printf("\n");
-            }
-#endif
         }
     }
 
@@ -1601,12 +1597,11 @@ void upsample_switch(
             data_output . write(tmp);
 #ifdef DEBUG_UPSAMPLE
             int out_w = config_list[5];
-            int p = 1;
-            ap_int< 8 > tmp_buf = (tmp(((p + 1) * 8 - 1), (p * 8)));
-            printf("debug_upsample[%3d][%3d]=%d ", j / out_w,j % out_w,(tmp_buf . to_int()));
-            if (j % out_w == out_w - 1) {
-                printf("\n");
+            for(int p = 0; p < PARALLEL_FILTER; p++){
+                ap_int< 8 > tmp_buf = (tmp(((p + 1) * 8 - 1), (p * 8)));
+                printf("[p%d] debug_upsample[%3d][%3d]=%d ", p, j / out_w,j % out_w,(tmp_buf . to_int()));
             }
+            printf("\n");
 #endif
         }
     }
@@ -1643,7 +1638,7 @@ void read_fifo(
             data_out[i * new_w / FACTORS + j] = (((tmp_buf[3] , tmp_buf[2] , tmp_buf[1])) , tmp_buf[0]);
 
     #ifdef DEBUG_DATAOUT
-            int p = 1;
+            int p = 0;
             printf("index[%3d] ", i * new_w / 4 + j);
             ap_int< 8 > tmp0_buf = (tmp_buf[0](((p + 1) * 8 - 1), (p * 8)));
             printf("debug1_image_out[%3d][%3d]=%d ", i%out_h, j*4+0, (tmp0_buf . to_int()));
@@ -1673,7 +1668,7 @@ void read_fifo(
             data_out[i * new_w / FACTORS + out_h / FACTORS] = (((tmp_buf[3] , tmp_buf[2] , tmp_buf[1])) , tmp_buf[0]);
     #ifdef DEBUG_DATAOUT
             printf("index[%3d] ", i * new_w / 4 + out_h / 4);
-            int p = 1;
+            int p = 0;
             ap_int< 8 > tmp0_buf = (tmp_buf[0](((p + 1) * 8 - 1), (p * 8)));
             printf("debug0_image_out[%3d][%3d]=%d ", i%out_h, (out_h / 4)*4+0, (tmp0_buf . to_int()));
             ap_int< 8 > tmp1_buf = (tmp_buf[1](((p + 1) * 8 - 1), (p * 8)));
