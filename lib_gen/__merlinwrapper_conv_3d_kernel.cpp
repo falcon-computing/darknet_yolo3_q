@@ -263,9 +263,9 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             printf("queue %d finished\n", queue_idx);
 #endif
             // copy 3 yolo layer out
-            int size1 = config_list_all[58][2][19];
-            int size2 = config_list_all[66][2][19];
-            int size3 = config_list_all[74][2][19];
+            int size1 = config_list_all[58][2][8] * config_list_all[58][2][6] * config_list_all[58][2][7];
+            int size2 = config_list_all[66][2][8] * config_list_all[66][2][6] * config_list_all[66][2][7];
+            int size3 = config_list_all[74][2][8] * config_list_all[74][2][6] * config_list_all[74][2][7];
             //===========================================//
             //memcpy yolo layer input data from global memory offset
             //===========================================//
@@ -339,7 +339,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             printf("saving layer...\n");
             for(int layer_x = layer_min; layer_x < layer_max + 1; layer_x++){
                 printf("saving layer %d size %d index:%d\n", layer_x, config_list_all[layer_x][2][19], config_list_all[layer_x][2][29]);
-                int size_x = config_list_all[layer_x][2][19];
+                int size_x = config_list_all[layer_x][2][8] * config_list_all[layer_x][2][6] * config_list_all[layer_x][2][7];
                 DATA_T * layer_x_out_format = (DATA_T *)malloc(sizeof(DATA_T) * size_x); 
                 memcpy(layer_x_out_format, data_input[queue_idx].data() + config_list_all[layer_x][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size_x * sizeof(DATA_T));
                 config_format[0] = config_list_all[layer_x][2][8];
@@ -367,7 +367,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
                 } else{
                     org_layer = index_conv[layer_x + 1] - 1;
                 }
-                //write_data_file(555, layer_x_out_format, config_list_all[layer_x][2][5]*config_list_all[layer_x][2][6]*config_list_all[layer_x][2][7]);//debug layer
+                //write_data_file(org_layer+500, layer_x_out_format, data_size);//debug layer
                 write_data_file(org_layer, layer_x_out, data_size);//debug layer
             }
 #endif

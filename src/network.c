@@ -33,7 +33,6 @@
 #include "parser.h"
 #include "data.h"
 #define MAX_LINE 100
-//#define DEBUG_FPGA 1
 
 void write_data_file(int layer, DATA_T * value, int size) {
     char file_name[] = "output_layerXXX.dat";
@@ -306,7 +305,6 @@ network *make_network(int n)
 
 void forward_network(network *netp)
 {
-#define OUTPUT_REF
 #ifdef GPU
     if(netp->gpu_index >= 0){
         forward_network_gpu(netp);   
@@ -321,7 +319,7 @@ void forward_network(network *netp)
         if(l.delta){
             fill_cpu(l.outputs * l.batch, 0, l.delta, 1);
         }
-        #ifdef OUTPUT_REF
+        #if OUTPUT_REF == 1
         if(i != 82 && i != 94 && i != 106
                 && i != 83 && i != 86 && i!= 95 && i!= 98) {
             write_data_file_int8_input(i, net.input, l.inputs);
@@ -331,7 +329,7 @@ void forward_network(network *netp)
         time=what_time_is_it_now();
         l.forward(l, net);
         printf("layer %d in %f seconds.\n", i, what_time_is_it_now()-time); 
-        #ifdef OUTPUT_REF
+        #if OUTPUT_REF == 1
         if(i != 82 && i != 94 && i != 106) {
             write_data_file_int8(i, l.output, l.outputs);
         }
@@ -352,7 +350,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
     int debug_layer = test_cfg[2];
     //int cfg_channel = test_cfg[2];
     int cfg_filter = test_cfg[3];
-    #ifdef DEBUG_FPGA
+    #if DEBUG_FPGA == 1
     printf("testing cfg = %d %d %d %d\n", layer_min, layer_max, debug_layer, cfg_filter);
     #endif
     network net = *netp;
@@ -376,7 +374,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
         }
         #endif
     }
-    #ifdef DEBUG_FPGA
+    #if DEBUG_FPGA == 1
     printf("collect bias finished\n");
     #endif
     
@@ -422,7 +420,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
         weights_in[0] = (DATA_T*)malloc(weight_size * sizeof(DATA_T));
         data_format_transform(weights_layer_0, weights_in[0], config_format);
     }
-    #ifdef DEBUG_FPGA
+    #if DEBUG_FPGA == 1
     printf("transform weights[0] finished\n");
     #endif
     
@@ -452,7 +450,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
         #endif
         data_format_transform(net.layers[net.index].weights, weights_in[l_cnt], config_format);
     }
-    #ifdef DEBUG_FPGA
+    #if DEBUG_FPGA == 1
     printf("transform weights finished\n");
     #endif
 
@@ -470,14 +468,14 @@ void forward_network_fpga(network *netp, int * test_cfg)
     //===========================================//
     //loading weight and bias to global memory, only need once for different images
     //===========================================//
-    #ifdef DEBUG_FPGA
+    #if DEBUG_FPGA == 1
     printf("loading weight\n");
     #endif
     #if FPGA == 1
     __merlin_load_weight(weights_in, bias_in);
     #endif
     int debug_config[10];
-    #ifdef DEBUG_CPU
+    #if DEBUG_CPU == 1
     debug_config[0] = debug_layer;//new layer
     if(layer_min == 58)
         debug_config[1] = 81;// old layer
@@ -503,9 +501,9 @@ void forward_network_fpga(network *netp, int * test_cfg)
     int i_h = config_list_all[new_layer_x][0][2];
     int i_c = config_list_all[new_layer_x][0][3];
     int data_size = i_w * i_h * i_c;
-//    #ifdef DEBUG_FPGA
-    printf("debug_layer:%d, old layer:%d, data_size:%d, w = %d, h = %d, c = %d\n", new_layer_x, old_layer_x, data_size, i_w, i_h, i_c);
-//    #endif
+    #if DEBUG_FPGA == 1
+    printf("debug_layer:%d, old layer:%d, data_size:%d\n", new_layer_x, old_layer_x, data_size);
+    #endif
 
     DATA_T * layer_x_in = malloc(sizeof(DATA_T)*data_size);
     read_data_file(old_layer_x, layer_x_in);
@@ -531,7 +529,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
     //fpga acceleration
     //currently including conv, shorcut, route, upsample layers
     //===========================================//
-    #ifdef DEBUG_FPGA
+    #if DEBUG_FPGA == 1
     printf("detecting\n");
     #endif
     struct timeval tv_start, tv_end;
@@ -539,20 +537,21 @@ void forward_network_fpga(network *netp, int * test_cfg)
     gettimeofday(&tv_start, NULL);
 //    write_data_file(302, layer_0_in, l0.inputs);//debug layer  
     #if FPGA == 1
-    #ifdef DEBUG_CPU
+    #if DEBUG_CPU == 1
     __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_out, yolo2_out, yolo3_out, 1, debug_config);
-    //exit(1);
     #else
+    /*
     debug_config[0] = 0;
     debug_config[1] = 0;
     debug_config[2] = 0;
     debug_config[3] = 74;
     debug_config[4] = 0;
     debug_config[5] = 0;
+    */
     __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_out, yolo2_out, yolo3_out, batch, debug_config);
     #endif // DEBUG_CPU
     #endif
-    #ifdef DEBUG_FPGA
+    #if DEBUG_FPGA == 1
     printf("finish opencl kernel\n");
     #endif
     gettimeofday(&tv_end, NULL);
@@ -873,7 +872,7 @@ float *network_predict_fpga(network *net, float *input, int * test_cfg)
     network orig = *net;
     // net->input = input;
     int i_q;
-    #ifdef DEBUG_FPGA
+    #if DEBUG_FPGA == 1
     double time;
     time=what_time_is_it_now();
     #endif
@@ -884,7 +883,7 @@ float *network_predict_fpga(network *net, float *input, int * test_cfg)
         //net->input[i_q] = round(input[i_q] * 64);
     }
 //    write_data_file(0, net->input , net->inputs);//debug layer  
-    #ifdef DEBUG_FPGA
+    #if DEBUG_FPGA == 1
     printf("first layer quantize in %f seconds.\n", what_time_is_it_now()-time); 
     #endif
     int sum_aq = sum_f(net->input, net->inputs);
