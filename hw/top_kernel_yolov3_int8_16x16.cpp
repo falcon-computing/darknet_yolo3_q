@@ -23,8 +23,7 @@ IMAGE_DT xilinx_quantizer_shift(IMAGE_4DT input, int shift_count)
 {
     IMAGE_4DT ret_val;
     if (shift_count > 0){
-        int tmp = shift_count - 1;
-        int right_of_shift = 1 << tmp;
+        int right_of_shift = 1 << (shift_count - 1);
         if (input & right_of_shift){
             
             ret_val = (input >> shift_count) + 1;
@@ -1419,18 +1418,22 @@ void shortcut_core(
             ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > input_buf2 = (buf_in_image[i]((f+1)*ORG_DATA_WIDTH*PARALLEL_FILTER-1, f*ORG_DATA_WIDTH*PARALLEL_FILTER));
             merlinL76:
             for (int p = 0; p < PARALLEL_FILTER; p++) {
-                ap_int< ORG_DATA_WIDTH > tmp_buf1 = (input_buf1(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
-                ap_int< ORG_DATA_WIDTH > tmp_buf2 = (input_buf2(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
+                IMAGE_4DT tmp_buf1 = (input_buf1(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
+                IMAGE_4DT tmp_buf2 = (input_buf2(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
                 IMAGE_4DT tmp_o1 = tmp_buf1 << right_shift_cnt0;
                 IMAGE_4DT tmp_o2 = tmp_buf2 << right_shift_cnt1;
                 IMAGE_4DT tmp_o = (tmp_o1 + tmp_o2);
                 IMAGE_DT sum1 = xilinx_quantizer_shift(tmp_o, right_shift_cnt2);
                 tmp_a[p] = sum1;
 #ifdef DEBUG_SHORTCUT
-                printf("[p%d]shortcut_data[%4d]:(%3d->%3d) + (%3d->%3d) ", p, i*4+f,(tmp_buf1 . to_int()),(tmp_o1 . to_int()),(tmp_buf2 . to_int()),(tmp_o2 . to_int()));
-                printf(" =  (%3d->%3d)\n", (tmp_o . to_int()),(sum1 . to_int()));
+                printf("[p%2d]shortcut_data[%4d]:(%3d->%3d) + (%3d->%3d) ", p, i*4+f,(tmp_buf1 . to_int()),(tmp_o1 . to_int()),(tmp_buf2 . to_int()),(tmp_o2 . to_int()));
+                printf(" =  (%3d->%3d) ", (tmp_o . to_int()),(sum1 . to_int()));
 #endif
             }
+#ifdef DEBUG_SHORTCUT
+                printf("\n");
+#endif
+
             ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > output_buf = ((((((((((((((((tmp_a[15] , tmp_a[14] , tmp_a[13])) , tmp_a[12] , tmp_a[11])) , tmp_a[10] , tmp_a[9])) , tmp_a[8] , tmp_a[7])) , tmp_a[6] , tmp_a[5])) , tmp_a[4] , tmp_a[3])) , tmp_a[2] , tmp_a[1])) , tmp_a[0]));
             stream_output . write(output_buf);
         }

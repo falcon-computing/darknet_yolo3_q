@@ -5,7 +5,7 @@ OPENMP=0
 DEBUG=0
 FPGA=1
 DEBUG_CPU=1
-DEBUG_FPGA=0
+DEBUG_FPGA=1
 OUTPUT_REF=0
 
 ARCH= -gencode arch=compute_30,code=sm_30 \

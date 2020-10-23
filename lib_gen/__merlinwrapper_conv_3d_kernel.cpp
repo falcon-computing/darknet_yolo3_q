@@ -8,7 +8,7 @@
 #include "__merlin_opencl_if.h"
 #include "time.h"
 #include <sys/time.h>
-#define DEBUG_LIB
+//#define DEBUG_LIB
 
 void write_data_file_float(int layer, float * value, int size) {
     char file_name[] = "output_layerXXX.dat";
