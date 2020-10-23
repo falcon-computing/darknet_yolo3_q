@@ -463,7 +463,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
             layer_0_in[m] = net.input[m];
         }
     }
-    //write_data_file(300, layer_0_in, l0.inputs);//debug layer  
+    write_data_file(300, layer_0_in, l0.inputs);//debug layer  
     
     //===========================================//
     //loading weight and bias to global memory, only need once for different images
@@ -507,6 +507,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
 
     DATA_T * layer_x_in = malloc(sizeof(DATA_T)*data_size);
     read_data_file(old_layer_x, layer_x_in);
+    write_data_file(301, layer_x_in, l0.inputs);//debug layer  
     #ifdef DEBUG_SIM
     int l_c = net.layers[old_layer_x].c;
     int l_n = net.layers[old_layer_x].n;
@@ -521,7 +522,6 @@ void forward_network_fpga(network *netp, int * test_cfg)
             }
         }
     }
-//    write_data_file(301, layer_x_in, l0.inputs);//debug layer  
     #endif // DEBUG_SIM
     #endif
     
@@ -540,14 +540,14 @@ void forward_network_fpga(network *netp, int * test_cfg)
     #if DEBUG_CPU == 1
     __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_out, yolo2_out, yolo3_out, 1, debug_config);
     #else
-    /*
+    
     debug_config[0] = 0;
     debug_config[1] = 0;
     debug_config[2] = 0;
     debug_config[3] = 74;
-    debug_config[4] = 0;
-    debug_config[5] = 0;
-    */
+    debug_config[4] = 416;
+    debug_config[5] = 3;
+    
     __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_out, yolo2_out, yolo3_out, batch, debug_config);
     #endif // DEBUG_CPU
     #endif
