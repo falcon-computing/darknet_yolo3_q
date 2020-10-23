@@ -504,7 +504,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
     int i_c = config_list_all[new_layer_x][0][3];
     int data_size = i_w * i_h * i_c;
 //    #ifdef DEBUG_FPGA
-    printf("debug_layer:%d, old layer:%d, data_size:%d\n", new_layer_x, old_layer_x, data_size);
+    printf("debug_layer:%d, old layer:%d, data_size:%d, w = %d, h = %d, c = %d\n", new_layer_x, old_layer_x, data_size, i_w, i_h, i_c);
 //    #endif
 
     DATA_T * layer_x_in = malloc(sizeof(DATA_T)*data_size);
