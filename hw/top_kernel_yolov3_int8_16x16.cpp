@@ -1418,10 +1418,12 @@ void shortcut_core(
             ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > input_buf2 = (buf_in_image[i]((f+1)*ORG_DATA_WIDTH*PARALLEL_FILTER-1, f*ORG_DATA_WIDTH*PARALLEL_FILTER));
             merlinL76:
             for (int p = 0; p < PARALLEL_FILTER; p++) {
-                IMAGE_4DT tmp_buf1 = (input_buf1(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
-                IMAGE_4DT tmp_buf2 = (input_buf2(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
-                IMAGE_4DT tmp_o1 = tmp_buf1 << right_shift_cnt0;
-                IMAGE_4DT tmp_o2 = tmp_buf2 << right_shift_cnt1;
+                ap_int< ORG_DATA_WIDTH > tmp_buf1 = (input_buf1(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
+                ap_int< ORG_DATA_WIDTH > tmp_buf2 = (input_buf2(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
+                IMAGE_4DT tmp_1 = tmp_buf1;
+                IMAGE_4DT tmp_2 = tmp_buf2;
+                IMAGE_4DT tmp_o1 = tmp_1 << right_shift_cnt0;
+                IMAGE_4DT tmp_o2 = tmp_2 << right_shift_cnt1;
                 IMAGE_4DT tmp_o = (tmp_o1 + tmp_o2);
                 IMAGE_DT sum1 = xilinx_quantizer_shift(tmp_o, right_shift_cnt2);
                 tmp_a[p] = sum1;

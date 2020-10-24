@@ -540,14 +540,14 @@ void forward_network_fpga(network *netp, int * test_cfg)
     #if DEBUG_CPU == 1
     __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_out, yolo2_out, yolo3_out, 1, debug_config);
     #else
-    /*
+    
     debug_config[0] = 0;
     debug_config[1] = 0;
     debug_config[2] = 0;
     debug_config[3] = 74;
-    debug_config[4] = 0;
-    debug_config[5] = 0;
-    */
+    debug_config[4] = 416;
+    debug_config[5] = 3;
+    
     __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_out, yolo2_out, yolo3_out, batch, debug_config);
     #endif // DEBUG_CPU
     #endif
