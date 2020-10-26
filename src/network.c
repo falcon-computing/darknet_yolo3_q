@@ -463,7 +463,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
             layer_0_in[m] = net.input[m];
         }
     }
-    write_data_file(300, layer_0_in, l0.inputs);//debug layer  
+    //write_data_file(300, layer_0_in, l0.inputs);//debug layer  
     
     //===========================================//
     //loading weight and bias to global memory, only need once for different images
@@ -507,7 +507,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
 
     DATA_T * layer_x_in = malloc(sizeof(DATA_T)*data_size);
     read_data_file(old_layer_x, layer_x_in);
-    write_data_file(301, layer_x_in, l0.inputs);//debug layer  
+    //write_data_file(301, layer_x_in, l0.inputs);//debug layer  
     #ifdef DEBUG_SIM
     int l_c = net.layers[old_layer_x].c;
     int l_n = net.layers[old_layer_x].n;
