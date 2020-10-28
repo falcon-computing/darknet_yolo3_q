@@ -8,7 +8,7 @@
 #include "__merlin_opencl_if.h"
 #include "time.h"
 #include <sys/time.h>
-#define DEBUG_LIB
+//#define DEBUG_LIB
 
 void write_data_file_float(int layer, float * value, int size) {
     char file_name[] = "output_layerXXX.dat";
@@ -326,9 +326,9 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             printf("3 yolos in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
 #ifdef DEBUG_LIB
-            //write_data_file_float(82,  yolo1_out, 12675);
-            //write_data_file_float(94,  yolo2_out, 50700);
-            //write_data_file_float(106, yolo3_out, 202800);
+            write_data_file_float(82,  yolo1_out, 12675);
+            write_data_file_float(94,  yolo2_out, 50700);
+            write_data_file_float(106, yolo3_out, 202800);
             printf("finish yolo-1\n");
             printf("finish yolo-2\n");
             printf("finish yolo-3\n");
