@@ -122,7 +122,7 @@ class NetworkParser:
     def get_output_layer_num(self):
         return self.output_layer_num
 
-    def generate_config_list(self, image_size, N16xh, PARALLEL_FILTER, SPLITING_FACTOR, ORG_DATA_WIDTH, WIDE_BUS_WIDTH, FACTORS):
+    def generate_config_list(self, image_size, N16xh, ONCHIP_SIZE, PARALLEL_FILTER, SPLITING_FACTOR, ORG_DATA_WIDTH, WIDE_BUS_WIDTH, FACTORS):
         config_dict = {}
         dict_config = {}
         index = 0
@@ -244,21 +244,68 @@ class NetworkParser:
                 sub_list[19] = sub_list[5] * sub_list[6] * sub_list[7]
                 #20 split_h
                 if sub_list[2] == 416:
-                    sub_list[20] = SPLITING_FACTOR
+                    if sub_list[9] == 1:#stride=1
+                        if sub_list[0] == 3:
+                            sub_list[20] = SPLITING_FACTOR
+                        else:
+                            sub_list[20] = 13
+                    else:#stride=2
+                        if ONCHIP_SIZE == 13:
+                            sub_list[20] = int(((13*16*512/sub_list[2]/16-2)-1)/2) * 2 + 1
+                        elif ONCHIP_SIZE == 26:
+                            sub_list[20] = int(((26*28*256/sub_list[2]/16-2)-1)/2) * 2 + 1
+                        elif ONCHIP_SIZE == 52:
+                            sub_list[20] = int(((52*52*192/sub_list[2]/16-2)-1)/2) * 2 + 1
+                        else:
+                            sub_list[20] = SPLITING_FACTOR
+
+                        if sub_list[20] > SPLITING_FACTOR * 416 / sub_list[2] * 2 - 1:
+                            sub_list[20] = int(SPLITING_FACTOR * 416 / sub_list[2] * 2 - 1)
+                        sub_list[20] = 13
+
                 elif sub_list[2] == 208:
                     if sub_list[9] == 1:#stride=1
-                        sub_list[20] = SPLITING_FACTOR * 2
-                    else:
-                        sub_list[20] = SPLITING_FACTOR * 2 + 1
+                        if sub_list[0] == 3:
+                            sub_list[20] = SPLITING_FACTOR * 2
+                        else:
+                            sub_list[20] = 13
+                    else:#stride=2
+                        if ONCHIP_SIZE == 13:
+                            sub_list[20] = int(((13*16*512/sub_list[2]/16-2)-1)/2) * 2 + 1
+                        elif ONCHIP_SIZE == 26:
+                            sub_list[20] = int(((26*28*256/sub_list[2]/16-2)-1)/2) * 2 + 1
+                        elif ONCHIP_SIZE == 52:
+                            sub_list[20] = int(((52*52*192/sub_list[2]/16-2)-1)/2) * 2 + 1
+                        else:
+                            sub_list[20] = SPLITING_FACTOR
+
+                        if sub_list[20] > SPLITING_FACTOR * 416 / sub_list[2] * 2 - 1:
+                            sub_list[20] = int(SPLITING_FACTOR * 416 / sub_list[2] * 2 - 1)
+
                 elif sub_list[2] == 104:
                     if sub_list[9] == 1:#stride=1
-                        sub_list[20] = SPLITING_FACTOR * 4
-                    else:
-                        sub_list[20] = SPLITING_FACTOR * 4 + 5
+                        if sub_list[0] == 3:
+                            #sub_list[20] = SPLITING_FACTOR * 4
+                            sub_list[20] = 26
+                        else:
+                            sub_list[20] = 26
+                    else:#stride=2
+                        if ONCHIP_SIZE == 13:
+                            sub_list[20] = int(((13*16*512/sub_list[2]/16-2)-1)/2) * 2 + 1
+                        elif ONCHIP_SIZE == 26:
+                            sub_list[20] = int(((26*28*256/sub_list[2]/16-2)-1)/2) * 2 + 1
+                        elif ONCHIP_SIZE == 52:
+                            sub_list[20] = int(((52*52*192/sub_list[2]/16-2)-1)/2) * 2 + 1
+                        else:
+                            sub_list[20] = SPLITING_FACTOR
+
+                        if sub_list[20] > SPLITING_FACTOR * 416 / sub_list[2] * 2 - 1:
+                            sub_list[20] = int(SPLITING_FACTOR * 416 / sub_list[2] * 2 - 1)
+
                 elif sub_list[2] == 52:
-                    sub_list[20] = SPLITING_FACTOR * 4
+                    sub_list[20] = 52
                 elif sub_list[2] == 26:
-                    sub_list[20] = SPLITING_FACTOR * 2
+                    sub_list[20] = 26
                 else:
                     sub_list[20] = 13
                 #21 conv 3x3 cond
@@ -650,12 +697,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--cfg", required=True, help="input configuration file")
     parser.add_argument("--N16xh", required=True, help="input burst line:N16 x in_h")
+    parser.add_argument("--ONCHIP_SIZE", required=True, help="input ONCHIP_SIZE")
     parser.add_argument("--image_size", required=False, help="input image size")
     args = parser.parse_args()
     N16xh = int(args.N16xh)
+    ONCHIP_SIZE = int(args.ONCHIP_SIZE)
     image_size = args.image_size
     image_size = 416
-    SPLITING_FACTOR = 13
+    SPLITING_FACTOR = 8
     PARALLEL_FILTER = 16
     TILING_IMAGE = 16
     ORG_DATA_WIDTH = 8
@@ -669,7 +718,7 @@ if __name__ == '__main__':
     print("   config_parser.json generated.")
     print("2. Parsing network...")
     network_parser = NetworkParser(dict_cfg)
-    dict_config = network_parser.generate_config_list(image_size, N16xh, PARALLEL_FILTER, SPLITING_FACTOR, ORG_DATA_WIDTH, WIDE_BUS_WIDTH, FACTORS)
+    dict_config = network_parser.generate_config_list(image_size, N16xh, ONCHIP_SIZE, PARALLEL_FILTER, SPLITING_FACTOR, ORG_DATA_WIDTH, WIDE_BUS_WIDTH, FACTORS)
     data_offset_in = network_parser.generate_data_offset_in()
     data_offset_out = network_parser.generate_data_offset_out()
     filter_offset = network_parser.generate_filter_offset()

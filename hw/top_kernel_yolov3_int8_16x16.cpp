@@ -403,10 +403,10 @@ void conv_1x1_core(
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_data_in,
 #ifdef DSP_PACK
     IMAGE_2DT weights_in[PARALLEL_FILTER/2][TILING_IMAGE],
-    IMAGE_8DT sum_buffer[PARALLEL_FILTER/2][2*SPLITING_FACTOR*208],
+    IMAGE_8DT sum_buffer[PARALLEL_FILTER/2][13*208],
 #else
     IMAGE_DT weights_in[PARALLEL_FILTER][TILING_IMAGE],
-    IMAGE_4DT sum_buffer[PARALLEL_FILTER][2*SPLITING_FACTOR*208],
+    IMAGE_4DT sum_buffer[PARALLEL_FILTER][13*208],
 #endif
     int one_compute_iter,
     bool init,
@@ -558,10 +558,10 @@ void conv_1x1_stream(
     int one_compute_iter = config_list[26];//out_w * 13;
     int out_h_13 = config_list[27];//out_h/SPLITING_FACTOR
 #ifdef DSP_PACK
-    IMAGE_8DT sum_buffer[PARALLEL_FILTER/2][2*SPLITING_FACTOR*208];
+    IMAGE_8DT sum_buffer[PARALLEL_FILTER/2][13*208];
     IMAGE_2DT weights_in[PARALLEL_FILTER/2][TILING_IMAGE];
 #else
-    IMAGE_4DT sum_buffer[PARALLEL_FILTER][2*SPLITING_FACTOR*208];
+    IMAGE_4DT sum_buffer[PARALLEL_FILTER][13*208];
     IMAGE_DT weights_in[PARALLEL_FILTER][TILING_IMAGE];
 #endif
 
@@ -1107,11 +1107,16 @@ void adder_out(
     hls::stream< IMAGE_4DT > stream_data_in[PARALLEL_FILTER], 
     #endif
     hls::stream< CONV_DT > stream_data_out[PARALLEL_FILTER], 
+    #ifdef RUNSIM
+    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416],
+    #endif
     int z, int s, int in_w, int in_c, int size, int stride, int pad, int new_h,
     int h_col, int w_col)
 {
 
+    #ifdef BITGEN
     IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
+    #endif
     //int h_col = (new_h + 2 * pad - size) / stride + 1;
     //int w_col = (in_w + 2 * pad - size) / stride + 1;
     if(w_col == 16) { w_col = 13; }
@@ -1224,14 +1229,23 @@ void conv_3x3_cuboid(
     #pragma HLS stream variable = stream_shift_in depth = 512
     #ifdef DSP_PACK
     hls::stream< IMAGE_4DT > stream_sum_out[PARALLEL_FILTER/2][2];
+    #pragma HLS stream variable = stream_sum_out depth = 512
     #else
     hls::stream< IMAGE_4DT > stream_sum_out[PARALLEL_FILTER];
-    #endif
     #pragma HLS stream variable = stream_sum_out depth = 512
+    #endif
+    #ifdef RUNSIM
+    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
+    #endif
+
     #pragma HLS dataflow
     shift_in_data(stream_in_ping, stream_in_pang, stream_shift_in, flag_fifo, z, in_w, in_h, split_h, size, stride, pad, new_h, loop_1, loop_2);
     compute_one_cube(line_buffer, weights_in, stream_shift_in, stream_sum_out, z, in_w, in_h, size, stride, pad, new_h, loop_1, loop_3);
+    #ifdef RUNSIM
+    adder_out(stream_sum_out, stream_out, conv_sum, z, s, in_w, in_c, size, stride, pad, new_h,h_col, w_col);
+    #else
     adder_out(stream_sum_out, stream_out, z, s, in_w, in_c, size, stride, pad, new_h,h_col, w_col);
+    #endif
 }
 
 void conv_3x3_stream(
