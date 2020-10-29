@@ -4,9 +4,11 @@ OPENCV=0
 OPENMP=0
 DEBUG=0
 FPGA=1
-DEBUG_CPU=0
-DEBUG_FPGA=0
+FPGA_SIM=1
+DEBUG_CPU=1
+DEBUG_FPGA=1
 OUTPUT_REF=0
+SOC=0
 
 ARCH= -gencode arch=compute_30,code=sm_30 \
       -gencode arch=compute_35,code=sm_35 \
@@ -28,15 +30,27 @@ endif
 EXEC=darknet
 OBJDIR=./obj/
 
+ifeq ($(SOC), 1) 
+CC=aarch64-linux-gnu-gcc
+CPP=aarch64-linux-gnu-g++
+else
 CC=gcc
 CPP=g++
+endif
 NVCC=nvcc 
 AR=ar
 ARFLAGS=rcs
 OPTS=-Ofast
+CFLAGS=-Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC
+ifeq ($(SOC), 1) 
+LDFLAGS = -I${SYSROOT}/usr/include/xrt -L${SYSROOT}/usr/lib -lOpenCL -lpthread -lrt -lstdc++ --sysroot=${SYSROOT}
+COMMON= -Iinclude/ -Isrc/
+COMMON+= -DSOC=1
+CFLAGS+= -DSOC=1
+else
 LDFLAGS= -lm -pthread  -lxilinxopencl -L $(XILINX_XRT)/lib
 COMMON= -Iinclude/ -Isrc/ -I $(XILINX_XRT)/include
-CFLAGS=-Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC
+endif
 
 ifeq ($(OPENMP), 1) 
 CFLAGS+= -fopenmp
@@ -56,14 +70,15 @@ COMMON+= `pkg-config --cflags opencv`
 endif
 
 ifeq ($(FPGA), 1) 
-COMMON+= -DFPGA  -O3 -Wno-deprecated-declarations
+COMMON+= -DFPGA  -O3 -Wno-deprecated-declarations -lm
 CFLAGS+= -DFPGA 
 LDFLAGS+= -L. -lkernel
 
 VENDOR=XILINX
 #DEVICE=vitis::zcu102_base
+DEVICE=vitis::xilinx_zcu102_base_202010_1
 #DEVICE=sdaccel::xilinx_u250_xdma_201830_2
-DEVICE=vitis::xilinx_u250_xdma_201830_2
+#DEVICE=vitis::xilinx_u250_xdma_201830_2
 
 KERNEL_NAME=kernel_top
 KERNEL_SRC_FILES= ./hw/top_kernel_yolov3_int8_16x16.cpp 
@@ -94,6 +109,11 @@ ONCHIP_SIZE_ATT = -DONCHIP_SIZE=$(ONCHIP_SIZE)
 
 CMP_OPT=-d11 -DFPGA   $(ATTRIBUTE) $(ONCHIP_SIZE_ATT) $(N16_LINE_ATT)
 LNK_OPT=-d11
+
+ifeq ($(FPGA_SIM), 1)
+LNK_OPT+= -DFPGA_SIM
+CMP_OPT+= -DFPGA_SIM
+endif
 
 ifeq ($(DEBUG_CPU), 1) 
 
@@ -213,7 +233,7 @@ bitgen:
 
 libgen:
 	rm -rf lib_gen/bin/libkernel.so;
-	cd lib_gen; make lib_gen; cd -;
+	cd lib_gen; make lib_gen SOC=$(SOC); cd -;
 	cp lib_gen/bin/libkernel.so .;
 
 runall:

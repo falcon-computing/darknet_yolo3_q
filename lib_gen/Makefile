@@ -7,6 +7,9 @@ SHELL = /bin/bash
 RUNTIME_FLAGS := $(XILINX_SDX)/runtime/include/1_2
 RUNTIME_LINK := $(XILINX_SDX)/runtime/lib/x86_64
 
+ifeq ($(SOC), 1) 
+
+else
 ifdef XILINX_XRT
 FILE=$(XILINX_XRT)/include
 ifeq ($(FILE), $(wildcard $(FILE)))
@@ -16,6 +19,8 @@ FILE=$(XILINX_XRT)/lib
 ifeq ($(FILE), $(wildcard $(FILE)))
 RUNTIME_LINK := $(FILE)
 endif
+endif
+
 endif
 
 ifdef XILINX_VIVADO
@@ -41,6 +46,9 @@ XFLAGS= -fPIC -DHLS_NO_XIL_FPO_LIB \
 		-I../include \
 		-I../src \
 		-I../
+ifeq ($(SOC), 1) 
+LINK = -I${SYSROOT}/usr/include/xrt -L${SYSROOT}/usr/lib -lOpenCL -lpthread -lrt -lstdc++ --sysroot=${SYSROOT}
+else
 LINK=   -L$(RUNTIME_LINK) \
 	    -lxilinxopencl\
 		-pthread -lrt -Wno-unused-label -Wno-narrowing -DVERBOSE -lstdc++  \
@@ -48,6 +56,9 @@ LINK=   -L$(RUNTIME_LINK) \
 		-lpthread -ldl 
 #		-lpthread -lm -ldl -lrt -fgnu89-inline
 		#-lpthread -lm -ldl -lrt -lstdc++ -std=c99 -fgnu89-inline
+endif
+
+
 LICENSE_DIR = ../
 LICENSE  = $(LICENSE_DIR)/license/license.o $(LICENSE_DIR)/license/lm_new.o   
 LICENSE += -L $(LICENSE_DIR)/license/ -Wl,-rpath=$(LICENSE_DIR)/license/
@@ -59,7 +70,11 @@ XCLBIN_NAME=kernel_top
 XCLBIN = ${XCLBIN_NAME}.xclbin
 
 #supported flow: cpu_sim, hw_sim, hw
+ifeq ($(SOC), 1) 
+CC = aarch64-linux-gnu-g++
+else
 CC = g++
+endif
 #CC = xcpp
 CLCC = xocc
 
