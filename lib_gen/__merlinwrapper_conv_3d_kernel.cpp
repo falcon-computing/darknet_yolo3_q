@@ -319,9 +319,9 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             time=what_time_is_it_now();
 #endif
             //TODO: in batch mode, it need to add offset for yolo outs
-            yolo_layer_q(yolo1_pre, yolo1_out, 12675,  13*13);
-            yolo_layer_q(yolo2_pre, yolo2_out, 50700,  26*26);
-            yolo_layer_q(yolo3_pre, yolo3_out, 202800, 52*52);
+            yolo_layer_q(yolo1_pre, yolo1_out + (frame_cnt - overlap) * 12675, 12675,  13*13);
+            yolo_layer_q(yolo2_pre, yolo2_out + (frame_cnt - overlap) * 50700, 50700,  26*26);
+            yolo_layer_q(yolo3_pre, yolo3_out + (frame_cnt - overlap) * 202800, 202800, 52*52);
 #ifdef DEBUG_LIB
             printf("3 yolos in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
@@ -381,7 +381,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             time=what_time_is_it_now();
 #endif
             //TODO: in batch mode, it need to add offset for input images
-            int offset = 0; //frame_cnt * image_size;
+            int offset = frame_cnt * (416 * 416 *3); //frame_cnt * image_size;
             data_format_transform(input + offset, layer_0_in_format[queue_idx], config_format);
 #ifdef DEBUG_LIB
             printf("first layer data transform in %f seconds.\n", what_time_is_it_now()-time); 
