@@ -326,9 +326,9 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             printf("3 yolos in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
 #ifdef DEBUG_LIB
-            write_data_file_float(82,  yolo1_out, 12675);
-            write_data_file_float(94,  yolo2_out, 50700);
-            write_data_file_float(106, yolo3_out, 202800);
+            write_data_file_float(82 + 200*(frame_cnt - overlap), yolo1_out + (frame_cnt - overlap) * 12675,  12675);
+            write_data_file_float(94 + 200*(frame_cnt - overlap), yolo2_out + (frame_cnt - overlap) * 50700,  50700);
+            write_data_file_float(106+ 200*(frame_cnt - overlap), yolo3_out + (frame_cnt - overlap) * 202800, 202800);
             printf("finish yolo-1\n");
             printf("finish yolo-2\n");
             printf("finish yolo-3\n");
@@ -384,9 +384,9 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             int offset = frame_cnt * (416 * 416 *3); //frame_cnt * image_size;
             data_format_transform(input + offset, layer_0_in_format[queue_idx], config_format);
 #ifdef DEBUG_LIB
+            write_data_file(0 + frame_cnt * 200, layer_0_in_format[queue_idx], config_list_all[layer_min][0][17]);//debug layer
             printf("first layer data transform in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
-            //write_data_file(203, layer_0_in_format[queue_idx], config_list_all[layer_min][0][17]);//debug layer
 
             //===========================================//
             //copy input data to alignment buffer
@@ -395,7 +395,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             time=what_time_is_it_now();
 #endif
             memcpy(data_input[queue_idx].data() + config_list_all[layer_min][0][28]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, 
-                    layer_0_in_format[0], 
+                    layer_0_in_format[queue_idx], 
                     config_list_all[layer_min][0][17] * sizeof(DATA_T));
 #ifdef DEBUG_LIB
             printf("first layer memcpy in %f seconds.\n", what_time_is_it_now()-time); 

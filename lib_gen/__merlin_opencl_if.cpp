@@ -47,11 +47,11 @@ int init(const std::string& binaryFileName) {
         buffer_weights[i] = new cl::Buffer(*m_context, 
                                            CL_MEM_EXT_PTR_XILINX | CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY,
                                            (OUTPUT_LAYER_NUM*1024*1024 + OUTPUT_LAYER_NUM*1024*sizeof(BIAS_DT)),
-                                           &ext_buffer_weights[0]);     
+                                           &ext_buffer_weights[i]);     
         buffer_input[i]   = new cl::Buffer(*m_context,
                                            CL_MEM_EXT_PTR_XILINX | CL_MEM_USE_HOST_PTR | CL_MEM_READ_WRITE,
                                            OUTPUT_LAYER_NUM*1024*1024*sizeof(DATA_T),
-                                           &ext_buffer_input[0]);
+                                           &ext_buffer_input[i]);
     }
     return 0;
 }
