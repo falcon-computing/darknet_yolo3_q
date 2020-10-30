@@ -76,9 +76,9 @@ LDFLAGS+= -L. -lkernel
 
 VENDOR=XILINX
 #DEVICE=vitis::zcu102_base
-DEVICE=vitis::xilinx_zcu102_base_202010_1
+#DEVICE=vitis::xilinx_zcu102_base_202010_1
 #DEVICE=sdaccel::xilinx_u250_xdma_201830_2
-#DEVICE=vitis::xilinx_u250_xdma_201830_2
+DEVICE=vitis::xilinx_u250_xdma_201830_2
 
 KERNEL_NAME=kernel_top
 KERNEL_SRC_FILES= ./hw/top_kernel_yolov3_int8_16x16.cpp 
@@ -102,8 +102,8 @@ ATTRIBUTE += --attribute memory_coalescing=off
 ATTRIBUTE += --vendor-options "-g"
 ATTRIBUTE += --attribute stream_prefetch=off
 
-N16_LINE:=208
-ONCHIP_SIZE:=52
+N16_LINE:=52
+ONCHIP_SIZE:=13
 N16_LINE_ATT = -DN16_LINE=$(N16_LINE)
 ONCHIP_SIZE_ATT = -DONCHIP_SIZE=$(ONCHIP_SIZE)
 
@@ -215,11 +215,9 @@ clean:
 config_gen:
 	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
 
-acc:
-	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
-	merlincc -c $(KERNEL_SRC_FILES) -DXILINX -o $(KERNEL_NAME) $(CMP_OPT) --platform=$(DEVICE)
-
 runsim:
+	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
+	merlincc -c $(KERNEL_SRC_FILES) -DXILINX -DRUNSIM -o $(KERNEL_NAME) $(CMP_OPT) --platform=$(DEVICE)
 	merlincc $(KERNEL_NAME).mco -march=sw_emu -D MCC_SIM -o kernel_top $(LNK_OPT) --platform=$(DEVICE)
 
 estimate:
@@ -228,7 +226,10 @@ estimate:
 runhw:
 	merlincc $(KERNEL_NAME).mco -march=hw_emu -D MCC_SIM -o kernel_top $(LNK_OPT) --platform=$(DEVICE)
 	XCL_EMULATION_MODE=hw_emu ./$(EXEC) $(EXE_ARGS)
+
 bitgen:
+	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
+	merlincc -c $(KERNEL_SRC_FILES) -DXILINX -DBITGEN -o $(KERNEL_NAME) $(CMP_OPT) --platform=$(DEVICE)
 	merlincc $(KERNEL_NAME).mco -o kernel_top_hw.xclbin -d11 --platform=$(DEVICE)
 
 libgen:
