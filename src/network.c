@@ -557,9 +557,9 @@ void forward_network_fpga(network *netp, int * test_cfg)
     
     //__merlin_exec_top_kernel_overlap(layer_0_in, yolo1_out, yolo2_out, yolo3_out, batch, debug_config);
     __merlin_exec_top_kernel_overlap(batched_layer_0_in, batched_yolo1_out, batched_yolo2_out, batched_yolo3_out, 2, debug_config);
-    memcpy(yolo1_out, batched_layer_0_in, 12675 * sizeof(float));
-    memcpy(yolo2_out, batched_yolo1_out, 50700 * sizeof(float));
-    memcpy(yolo3_out, batched_yolo2_out, 202800 * sizeof(float));
+    memcpy(yolo1_out, batched_yolo1_out + 12675, 12675 * sizeof(float));
+    memcpy(yolo2_out, batched_yolo2_out + 50700, 50700 * sizeof(float));
+    memcpy(yolo3_out, batched_yolo3_out + 202800, 202800 * sizeof(float));
     
     #endif // DEBUG_CPU
     #endif
