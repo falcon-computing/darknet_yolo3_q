@@ -215,6 +215,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
                                      int batch,
                                      int * debug_config)
 {
+    int i=0;
     int debug_layer = debug_config[0];
     int old_layer = debug_config[1];
     int layer_min = debug_config[2];
@@ -236,7 +237,6 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     config_format[3] = ((layer_c + PARALLEL_FILTER - 1)/PARALLEL_FILTER)*PARALLEL_FILTER;
     config_format[4] = PARALLEL_FILTER;
     DATA_T * layer_0_in_format[2]; 
-    int i=0;
     for(i=0; i<OVERLAP; i++) {
         layer_0_in_format[i] = (DATA_T*)malloc(config_list_all[layer_min][0][17] * sizeof(DATA_T));
     }
@@ -249,6 +249,19 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     int frame_cnt = 0;
     int queue_idx = 0;
 //    printf("first layer %f seconds.\n", what_time_is_it_now()); 
+
+#ifdef SOC
+    int8_t* data[2];
+    for(i=0; i<OVERLAP; i++) {
+        data[i] = (int8_t *)q[i]->enqueueMapBuffer(*buffer_input[i],
+                                               CL_TRUE,
+                                               CL_MAP_WRITE | CL_MAP_READ,
+                                               0,
+                                               sizeof(int8_t) * OUTPUT_LAYER_NUM*1024*1024*sizeof(DATA_T));
+    }
+#else
+#endif // SOC
+
     for(frame_cnt = 0; frame_cnt < batch + overlap; frame_cnt++){
         queue_idx = overlap == 1 ? 0 : flag % OVERLAP;
         if(frame_cnt >= overlap){
@@ -275,9 +288,15 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             DATA_T * yolo1_pre_format = (DATA_T *)malloc(sizeof(DATA_T) * size1); 
             DATA_T * yolo2_pre_format = (DATA_T *)malloc(sizeof(DATA_T) * size2); 
             DATA_T * yolo3_pre_format = (DATA_T *)malloc(sizeof(DATA_T) * size3); 
+#ifdef SOC
+            memcpy(yolo1_pre_format, data[queue_idx] + config_list_all[58][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size1 * sizeof(DATA_T));
+            memcpy(yolo2_pre_format, data[queue_idx] + config_list_all[66][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size2 * sizeof(DATA_T));
+            memcpy(yolo3_pre_format, data[queue_idx] + config_list_all[74][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size3 * sizeof(DATA_T));
+#else
             memcpy(yolo1_pre_format, data_input[queue_idx].data() + config_list_all[58][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size1 * sizeof(DATA_T));
             memcpy(yolo2_pre_format, data_input[queue_idx].data() + config_list_all[66][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size2 * sizeof(DATA_T));
             memcpy(yolo3_pre_format, data_input[queue_idx].data() + config_list_all[74][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size3 * sizeof(DATA_T));
+#endif // SOC
 #ifdef DEBUG_LIB
             printf("last layer memcpy out %f seconds.\n", what_time_is_it_now()-time); 
 #endif
@@ -341,7 +360,11 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
                 printf("saving layer %d size %d index:%d\n", layer_x, config_list_all[layer_x][2][19], config_list_all[layer_x][2][29]);
                 int size_x = config_list_all[layer_x][2][8] * config_list_all[layer_x][2][6] * config_list_all[layer_x][2][7];
                 DATA_T * layer_x_out_format = (DATA_T *)malloc(sizeof(DATA_T) * size_x); 
+#ifdef SOC
+                memcpy(layer_x_out_format, data[queue_idx] + config_list_all[layer_x][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size_x * sizeof(DATA_T));
+#else
                 memcpy(layer_x_out_format, data_input[queue_idx].data() + config_list_all[layer_x][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size_x * sizeof(DATA_T));
+#endif //SOC
                 config_format[0] = config_list_all[layer_x][2][8];
                 config_format[1] = config_list_all[layer_x][2][6];
                 config_format[2] = config_list_all[layer_x][2][7];
@@ -394,9 +417,15 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #ifdef DEBUG_LIB
             time=what_time_is_it_now();
 #endif
+#ifdef SOC
+            memcpy(data[queue_idx] + config_list_all[layer_min][0][28]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, 
+                    layer_0_in_format[queue_idx], 
+                    config_list_all[layer_min][0][17] * sizeof(DATA_T));
+#else
             memcpy(data_input[queue_idx].data() + config_list_all[layer_min][0][28]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, 
                     layer_0_in_format[queue_idx], 
                     config_list_all[layer_min][0][17] * sizeof(DATA_T));
+#endif // SOC
 #ifdef DEBUG_LIB
             printf("first layer memcpy in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
@@ -432,6 +461,7 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
         }
         flag++;
     }
+    return 0;
 }
 
 //===========================================//
@@ -443,6 +473,31 @@ int __merlin_load_weight(DATA_T *weights[75], int32_t bias[75][1024]) {
 #ifdef DEBUG_LIB
     printf("memcpy weight to alignment buffer\n");
 #endif
+#ifdef SOC
+    int8_t* weight_in[2] ;
+    for(int i=0; i<OVERLAP; i++) {
+        weight_in[i] = (int8_t *)q[i]->enqueueMapBuffer(*buffer_weights[i],
+                                                 CL_TRUE,
+                                                 CL_MAP_WRITE,
+                                                 0,
+                                                 sizeof(int8_t) * (OUTPUT_LAYER_NUM*1024*1024 + OUTPUT_LAYER_NUM*1024*sizeof(BIAS_DT)));
+    }
+    for(layer_cnt = 0; layer_cnt < OUTPUT_LAYER_NUM; layer_cnt++){
+        for(int i=0; i<OVERLAP; i++) {
+            // copy weight
+            memcpy(weight_in[i] + config_list_all[layer_cnt][0][30]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH,
+                   weights[layer_cnt],
+                   config_list_all[layer_cnt][0][0] * config_list_all[layer_cnt][0][0] \
+                   * config_list_all[layer_cnt][0][3] \
+                   * config_list_all[layer_cnt][0][7] \
+                   * sizeof(DATA_T));
+            // copy bias
+            memcpy(weight_in[i] + OUTPUT_LAYER_NUM * 1024 * 1024 + layer_cnt * 1024 * sizeof(BIAS_DT),
+                   bias[layer_cnt],
+                   config_list_all[layer_cnt][0][7] * sizeof(BIAS_DT));
+        }
+    }
+#else
     for(layer_cnt = 0; layer_cnt < OUTPUT_LAYER_NUM; layer_cnt++){
         for(int i=0; i<OVERLAP; i++) {
             // copy weight
@@ -458,6 +513,8 @@ int __merlin_load_weight(DATA_T *weights[75], int32_t bias[75][1024]) {
                    config_list_all[layer_cnt][0][7] * sizeof(BIAS_DT));
         }
     }
+#endif // SOC
+
 #ifdef DEBUG_LIB
     printf("transfer weight to global memory\n");
 #endif

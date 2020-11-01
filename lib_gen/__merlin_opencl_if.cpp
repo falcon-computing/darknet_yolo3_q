@@ -27,9 +27,19 @@ int init(const std::string& binaryFileName) {
     devices.resize(1);
     m_program = new cl::Program(*m_context, devices, bins);
     top_kernel = new cl::Kernel(*m_program, "top_kernel"); 
-    
+   
     // double buffer used to do overlap
     for(int i=0; i<OVERLAP; i++) {
+#ifdef SOC
+        buffer_weights[i] = new cl::Buffer(*m_context, 
+                                           CL_MEM_ALLOC_HOST_PTR | CL_MEM_READ_ONLY,
+                                           OUTPUT_LAYER_NUM*1024*1024 + OUTPUT_LAYER_NUM*1024*sizeof(BIAS_DT),
+                                           NULL);
+        buffer_input[i]   = new cl::Buffer(*m_context, 
+                                           CL_MEM_ALLOC_HOST_PTR | CL_MEM_READ_ONLY,
+                                           OUTPUT_LAYER_NUM*1024*1024*sizeof(DATA_T),
+                                           NULL);
+#else
         // set size for extend buffer
         // data_input include all layer input and output
         w_in[i].resize(OUTPUT_LAYER_NUM*1024*1024 + OUTPUT_LAYER_NUM*1024*sizeof(BIAS_DT)); 
@@ -52,6 +62,7 @@ int init(const std::string& binaryFileName) {
                                            CL_MEM_EXT_PTR_XILINX | CL_MEM_USE_HOST_PTR | CL_MEM_READ_WRITE,
                                            OUTPUT_LAYER_NUM*1024*1024*sizeof(DATA_T),
                                            &ext_buffer_input[i]);
+#endif
     }
     return 0;
 }

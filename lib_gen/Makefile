@@ -47,7 +47,7 @@ XFLAGS= -fPIC -DHLS_NO_XIL_FPO_LIB \
 		-I../src \
 		-I../
 ifeq ($(SOC), 1) 
-LINK = -I${SYSROOT}/usr/include/xrt -L${SYSROOT}/usr/lib -lOpenCL -lpthread -lrt -lstdc++ --sysroot=${SYSROOT}
+LINK = -I${SYSROOT}/usr/include/xrt -L${SYSROOT}/usr/lib -lOpenCL -lpthread -lrt -lstdc++ --sysroot=${SYSROOT} -DSOC
 else
 LINK=   -L$(RUNTIME_LINK) \
 	    -lxilinxopencl\
