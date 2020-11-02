@@ -193,7 +193,7 @@ class NetworkParser:
                 if route_channels > 0:
                     channel_size = route_channels
                     route_channels = 0
-                #3 in_c
+                #3 in_c : make sure channel_size is multiples of PARALLEL_FILTER
                 sub_list[3] = int((int(channel_size)+PARALLEL_FILTER-1)/PARALLEL_FILTER)*PARALLEL_FILTER
                 #4 batch
                 sub_list[4] = 1
@@ -205,10 +205,10 @@ class NetworkParser:
                 sub_list[5] = int(sub_list[1]/int(stride))
                 #6 out_h
                 sub_list[6] = int(feature_size)
-                #7 out_c
+                #7 out_c : make sure filters is multiples of PARALLEL_FILTER
                 sub_list[7] = int((int(filters)+PARALLEL_FILTER-1)/PARALLEL_FILTER)*PARALLEL_FILTER
                 channel_size = filters
-                #8 new_w
+                #8 new_w : new w of image is multiples of FACTORS
                 if sub_list[6] % FACTORS == 0:
                     sub_list[8] = int(feature_size)
                 else:
@@ -219,10 +219,10 @@ class NetworkParser:
                     pad = 0
                 #10 pad
                 sub_list[10] = int(pad)
-                #11 pos 
+                #11 pos : for bias quantization 
                 sub_list[11] = int(wpos) + int(ipos) - int(opos)
 
-                #12 batch_normalize / loop_3
+                #12 batch_normalize or loop_3 : stride 1 = w+1; stride 2 = w/2
                 #sub_list[12] = int(batch_normalize)
                 sub_list[12] = int((sub_list[1] + sub_list[10] - sub_list[9] + 1)/sub_list[9])
                 #13
@@ -242,30 +242,30 @@ class NetworkParser:
                 sub_list[18] = sub_list[5] * sub_list[6]
                 #19 out_w * out_h * out_c
                 sub_list[19] = sub_list[5] * sub_list[6] * sub_list[7]
-                #20 split_h
-                if sub_list[2] == 416:
+                #20 split_h: #should be the divisor of current h
+                if sub_list[2] == 416:#13x32
                     sub_list[20] = SPLITING_FACTOR
-                elif sub_list[2] == 208:
+                elif sub_list[2] == 208:#13x16
                     if sub_list[9] == 1:#stride=1
                         sub_list[20] = SPLITING_FACTOR * 2
-                    else:
-                        sub_list[20] = SPLITING_FACTOR * 2 + 1
+                    else:#stride=2 
+                        sub_list[20] = SPLITING_FACTOR * 2 + 1 #fully use burst in ping-pang bram, must be odd if not eqal h
                 elif sub_list[2] == 104:
                     if sub_list[9] == 1:#stride=1
                         sub_list[20] = SPLITING_FACTOR * 4
                     else:
-                        sub_list[20] = SPLITING_FACTOR * 4 + 5
+                        sub_list[20] = SPLITING_FACTOR * 4 + 5 #fully use burst in ping-pang bram, must be odd if not eqal h
                 elif sub_list[2] == 52:
                     sub_list[20] = SPLITING_FACTOR * 4
                 elif sub_list[2] == 26:
                     sub_list[20] = SPLITING_FACTOR * 2
                 else:
                     sub_list[20] = 13
-                #21 conv 3x3 cond
+                #21 conv 3x3 cond : block number after image h is split
                 sub_list[21] = int(sub_list[2]/(sub_list[20] + sub_list[9] - 1))
                 #22 burst_length_filter
                 sub_list[22] = int(sub_list[3] * sub_list[0] * sub_list[0] * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
-                #23 new_h_2
+                #23 new_h_2 : new h of last block after image h is split 
                 sub_list[23] = int((sub_list[2] + 2 * sub_list[10] - sub_list[0])%(sub_list[20] + sub_list[9] - 1) + 1)
                 #24 burst_length
                 if(sub_list[2] == 13 or sub_list[2] == 26 or sub_list[2] == 52):
@@ -276,7 +276,7 @@ class NetworkParser:
                 #    sub_list[24] = int(sub_list[1] * sub_list[20] * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
                 else:
                     sub_list[24] = int(sub_list[1] * (sub_list[20] + 2 * sub_list[10]) * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
-                #25 w_col
+                #25 w_col : w after conv 
                 sub_list[25] = int((sub_list[1] + 2 * sub_list[10] - sub_list[0]) / sub_list[9] + 1)
                 #26 in_w * split_h
                 sub_list[26] = sub_list[1] * sub_list[20]
