@@ -439,10 +439,7 @@ void conv_1x1_core(
                     IMAGE_DT weight1_tmp = weights_in[p][l](15,8);
                     ap_int<27> w_tmp0 = 0;
                     w_tmp0(7,0)= weight0_tmp;
-                    w_tmp0(26,8) = (weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                                   weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                                   weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                                   weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7));
+                    w_tmp0(26,8) = (weight0_tmp(7,7) == 1) ? 0x7ffff : 0;
                     ap_int<27> w_tmp1 = 0;
                     w_tmp1(17,0) = 0;
                     w_tmp1(25,18) = weight1_tmp;
@@ -840,10 +837,7 @@ void conv_3x3_core(
                     IMAGE_DT weight1_tmp = weights_tmp(15,8);
                     ap_int<27> w_tmp0 = 0;
                     w_tmp0(7,0)= weight0_tmp;
-                    w_tmp0(26,8) = (weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                                   weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                                   weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                                   weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7));
+                    w_tmp0(26,8) = (weight0_tmp(7,7) == 1) ? 0x7ffff : 0;
                     ap_int<27> w_tmp1 = 0;
                     w_tmp1(25,18) = weight1_tmp;
                     w_tmp1(26,26) = weight1_tmp(7,7);

@@ -268,6 +268,10 @@ class NetworkParser:
                 #23 new_h_2 : new h of last block after image h is split 
                 sub_list[23] = int((sub_list[2] + 2 * sub_list[10] - sub_list[0])%(sub_list[20] + sub_list[9] - 1) + 1)
                 #24 burst_length
+                #N16xh:
+                #52: 52/13=4, 13 image->4*16 = burst 64 planes, 26-> 2*16 = 32
+                #104: 104/13=8, 13 image ->8*16 = burst 128 planes
+                #208: 208/13=16, 13 image ->16*16 = burst 256 planes
                 if(sub_list[2] == 13 or sub_list[2] == 26 or sub_list[2] == 52):
                     sub_list[24] = int(sub_list[1] * N16xh * PARALLEL_FILTER * ORG_DATA_WIDTH / WIDE_BUS_WIDTH)
                 #elif(sub_list[2] == 26):

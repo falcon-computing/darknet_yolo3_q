@@ -5,7 +5,7 @@ OPENMP=0
 DEBUG=0
 FPGA=1
 FPGA_SIM=0
-DEBUG_CPU=0
+DEBUG_CPU=1
 DEBUG_FPGA=0
 OUTPUT_REF=0
 SOC=0
@@ -102,7 +102,12 @@ ATTRIBUTE += --attribute memory_coalescing=off
 ATTRIBUTE += --vendor-options "-g"
 ATTRIBUTE += --attribute stream_prefetch=off
 
-N16_LINE:=52
+# N16xh:same with python config
+N16_LINE:=104
+# pingpang buffer size for input burst
+# 13: 13 * 16 * 512 * 8bit / 512 bus
+# 26: 26 * 28 * 256 * 8bit / 512 bus
+# 52: 52 * 52 * 192 * 8bit / 512 bus (192 becausue of one 384 channel layer)
 ONCHIP_SIZE:=13
 N16_LINE_ATT = -DN16_LINE=$(N16_LINE)
 ONCHIP_SIZE_ATT = -DONCHIP_SIZE=$(ONCHIP_SIZE)
@@ -245,6 +250,9 @@ runtest:
 
 run0:
 	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 0 0 0 16
+
+run56:
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 56 56 0 16
 
 run58:
 	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 58 58 0 16
