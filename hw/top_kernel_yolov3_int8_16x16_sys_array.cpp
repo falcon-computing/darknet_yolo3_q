@@ -437,20 +437,38 @@ void conv_1x1_core(
                     IMAGE_DT image_tmp = (buf_input(((f*PARALLEL_FILTER + l + 1) * ORG_DATA_WIDTH - 1), ((f*PARALLEL_FILTER + l) * ORG_DATA_WIDTH)));
                     IMAGE_DT weight0_tmp = weights_in[p][l](7,0);
                     IMAGE_DT weight1_tmp = weights_in[p][l](15,8);
-                    ap_int<27> w_tmp0 = 0;
-                    w_tmp0(7,0)= weight0_tmp;
-                    w_tmp0(26,8) = (weight0_tmp(7,7) == 1) ? 0x7ffff : 0;
-                    ap_int<27> w_tmp1 = 0;
-                    w_tmp1(17,0) = 0;
-                    w_tmp1(25,18) = weight1_tmp;
-                    w_tmp1(26,26) = weight1_tmp(7,7);
+                    bool flag0 = weight0_tmp(7, 7);
+                    bool flag1 = weight1_tmp(7, 7);
+                    bool flag2 = image_tmp(7, 7);
 
-                    ap_int<27> w_tmp = w_tmp0 + w_tmp1;
-                    ap_int<18> s_tmp = image_tmp;
+                    ap_uint<26> w_tmp;
+                    ap_uint<8> w_tmp_reg0;
+                    ap_uint<8> w_tmp_reg1;
+                    if(flag0 == 1)
+                        w_tmp_reg0( 7, 0) = ~weight0_tmp( 7, 0) + 1;
+                    else
+                        w_tmp_reg0( 7, 0) = weight0_tmp( 7, 0);
+                    w_tmp(7, 0) = w_tmp_reg0( 7, 0);
+                    w_tmp(17, 8) = 0;
 
-                    ap_int<44> r_tmp = w_tmp * s_tmp;
+                    if(flag1 == 1)
+                        w_tmp_reg1(7,0) = ~weight1_tmp(7,0) + 1;
+                    else
+                        w_tmp_reg1(7,0) = weight1_tmp(7,0);
+                    w_tmp(25,18) = w_tmp_reg1(7,0);
+
+                    ap_int<8> s_tmp;
+                    if(flag2 == 1)
+                        s_tmp = ~image_tmp + 1;
+                    else
+                        s_tmp = image_tmp;
+                    ap_int<44> r_tmp = s_tmp * w_tmp;
                     IMAGE_2DT sum0_tmp = r_tmp(15,0);
-                    IMAGE_2DT sum1_tmp = r_tmp(33,18) + r_tmp(17,17);
+                    IMAGE_2DT sum1_tmp = r_tmp(33,18);
+                    if(flag0 != flag2)
+                        sum0_tmp = ~sum0_tmp + 1;
+                    if(flag1 != flag2)
+                        sum1_tmp = ~sum1_tmp + 1;
                     result_sum0 += sum0_tmp;
                     result_sum1 += sum1_tmp;
 #ifdef DEBUG_CONV
@@ -831,23 +849,39 @@ void conv_3x3_core(
             for (int w = 0; w < size; w++) {
                 for (int h = 0; h < size; h++) {
                 #ifdef DSP_PACK
-                    IMAGE_DT image_tmp = shift[l][size - w - 1][h]((k+1)*8-1, k*8);
+                    IMAGE_DT shift_tmp = shift[l][size - w - 1][h]((k+1)*8-1, k*8);
                     IMAGE_2DT weights_tmp = weights_in[(l * 4 + k) * size * size + h * size + w];
                     IMAGE_DT weight0_tmp = weights_tmp(7,0);
                     IMAGE_DT weight1_tmp = weights_tmp(15,8);
-                    ap_int<27> w_tmp0 = 0;
-                    w_tmp0(7,0)= weight0_tmp;
-                    w_tmp0(26,8) = (weight0_tmp(7,7) == 1) ? 0x7ffff : 0;
-                    ap_int<27> w_tmp1 = 0;
-                    w_tmp1(25,18) = weight1_tmp;
-                    w_tmp1(26,26) = weight1_tmp(7,7);
-
-                    ap_int<27> w_tmp = w_tmp0 + w_tmp1;
-                    ap_int<18> s_tmp = image_tmp;
-
-                    ap_int<44> r_tmp = w_tmp * s_tmp;
+                    bool flag0 = weight0_tmp(7, 7);
+                    bool flag1 = weight1_tmp(7, 7);
+                    bool flag2 = shift_tmp(7, 7);
+                    ap_uint<26> w_tmp;
+                    ap_uint<8> w_tmp_reg0;
+                    ap_uint<8> w_tmp_reg1;
+                    if(flag0 == 1)
+                        w_tmp_reg0(7, 0) = ~weight0_tmp(7, 0) + 1;
+                    else
+                        w_tmp_reg0(7, 0) = weight0_tmp(7, 0);
+                    w_tmp(7, 0) = w_tmp_reg0(7, 0);
+                    w_tmp(17, 8) = 0;
+                    if(flag1 == 1)
+                        w_tmp_reg1(7, 0) = ~weight1_tmp(7, 0) + 1;
+                    else
+                        w_tmp_reg1(7, 0) = weight1_tmp(7, 0);
+                    w_tmp(25,18) = w_tmp_reg1(7, 0);
+                    ap_int<8> s_tmp;
+                    if(flag2 == 1)
+                        s_tmp(7,0) = ~shift_tmp(7,0) + 1;
+                    else
+                        s_tmp(7,0) = shift_tmp(7,0);
+                    ap_int<44> r_tmp = s_tmp * w_tmp;
                     IMAGE_2DT sum0_tmp = r_tmp(15,0);
-                    IMAGE_2DT sum1_tmp = r_tmp(33,18) + r_tmp(17,17);
+                    IMAGE_2DT sum1_tmp = r_tmp(33,18);
+                    if(flag0 != flag2)
+                        sum0_tmp = ~sum0_tmp + 1;
+                    if(flag1 != flag2)
+                        sum1_tmp = ~sum1_tmp + 1;
                     result_sum0 += sum0_tmp;
                     result_sum1 += sum1_tmp;
 #ifdef DEBUG_CONV
@@ -1073,16 +1107,16 @@ void adder_out(
     hls::stream< IMAGE_4DT > stream_data_in[PARALLEL_FILTER], 
     #endif
     hls::stream< CONV_DT > stream_data_out[PARALLEL_FILTER], 
-    #ifdef RUNSIM
+    #ifdef FPGA_SIM
     IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416],
     #endif
     int z, int s, int in_w, int in_c, int size, int stride, int pad, int new_h,
     int h_col, int w_col)
 {
 
-    #ifdef BITGEN
+    #ifndef FPGA_SIM
     IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
-    #endif
+    #endif  
     //int h_col = (new_h + 2 * pad - size) / stride + 1;
     //int w_col = (in_w + 2 * pad - size) / stride + 1;
     if(w_col == 16) { w_col = 13; }
@@ -1191,6 +1225,9 @@ void conv_3x3_cuboid(
     printf("cond=%d, new_h_1=%d, new_h_2=%d\n", cond, new_h_1, new_h_2);
     printf("w_col=%d, h_col=%d\n",w_col,h_col);
 #endif
+    #ifdef FPGA_SIM
+    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
+    #endif
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > stream_shift_in[2][4];
     #pragma HLS stream variable = stream_shift_in depth = 512
     #ifdef DSP_PACK
@@ -1199,13 +1236,10 @@ void conv_3x3_cuboid(
     hls::stream< IMAGE_4DT > stream_sum_out[PARALLEL_FILTER];
     #endif
     #pragma HLS stream variable = stream_sum_out depth = 512
-    #ifdef RUNSIM
-    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
-    #endif
     #pragma HLS dataflow
     shift_in_data(stream_in_ping, stream_in_pang, stream_shift_in, flag_fifo, z, in_w, in_h, split_h, size, stride, pad, new_h, loop_1, loop_2);
     compute_one_cube(line_buffer, weights_in, stream_shift_in, stream_sum_out, z, in_w, in_h, size, stride, pad, new_h, loop_1, loop_3);
-    #ifdef RUNSIM
+    #ifdef FPGA_SIM
     adder_out(stream_sum_out, stream_out, conv_sum, z, s, in_w, in_c, size, stride, pad, new_h,h_col, w_col);
     #else
     adder_out(stream_sum_out, stream_out, z, s, in_w, in_c, size, stride, pad, new_h,h_col, w_col);

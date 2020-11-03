@@ -507,6 +507,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
 
     DATA_T * layer_x_in = malloc(sizeof(DATA_T)*data_size);
     read_data_file(old_layer_x, layer_x_in);
+    //write_data_file(301, layer_x_in, l0.inputs);//debug layer  
     #ifdef DEBUG_SIM
     int l_c = net.layers[old_layer_x].c;
     int l_n = net.layers[old_layer_x].n;
@@ -521,7 +522,6 @@ void forward_network_fpga(network *netp, int * test_cfg)
             }
         }
     }
-//    write_data_file(301, layer_x_in, l0.inputs);//debug layer  
     #endif // DEBUG_SIM
     #endif
     
@@ -540,15 +540,27 @@ void forward_network_fpga(network *netp, int * test_cfg)
     #if DEBUG_CPU == 1
     __merlin_exec_top_kernel_overlap(layer_x_in, yolo1_out, yolo2_out, yolo3_out, 1, debug_config);
     #else
-    /*
+    
     debug_config[0] = 0;
     debug_config[1] = 0;
     debug_config[2] = 0;
     debug_config[3] = 74;
-    debug_config[4] = 0;
-    debug_config[5] = 0;
-    */
-    __merlin_exec_top_kernel_overlap(layer_0_in, yolo1_out, yolo2_out, yolo3_out, batch, debug_config);
+    debug_config[4] = 416;
+    debug_config[5] = 3;
+
+    DATA_T * batched_layer_0_in = malloc(sizeof(DATA_T)*416*416*3*2);
+    memcpy(batched_layer_0_in, layer_0_in, 416 * 416 * 3);
+    memcpy(batched_layer_0_in + (416 * 416 * 3), layer_0_in, 416 * 416 * 3 * sizeof(DATA_T));
+    float* batched_yolo1_out = calloc(12675*2, sizeof(float)); 
+    float* batched_yolo2_out = calloc(50700*2, sizeof(float)); 
+    float* batched_yolo3_out = calloc(202800*2, sizeof(float));
+    
+    //__merlin_exec_top_kernel_overlap(layer_0_in, yolo1_out, yolo2_out, yolo3_out, batch, debug_config);
+    __merlin_exec_top_kernel_overlap(batched_layer_0_in, batched_yolo1_out, batched_yolo2_out, batched_yolo3_out, 2, debug_config);
+    memcpy(yolo1_out, batched_yolo1_out + 12675, 12675 * sizeof(float));
+    memcpy(yolo2_out, batched_yolo2_out + 50700, 50700 * sizeof(float));
+    memcpy(yolo3_out, batched_yolo3_out + 202800, 202800 * sizeof(float));
+    
     #endif // DEBUG_CPU
     #endif
     #if DEBUG_FPGA == 1

@@ -4,9 +4,11 @@ OPENCV=0
 OPENMP=0
 DEBUG=0
 FPGA=1
+FPGA_SIM=0
 DEBUG_CPU=1
-DEBUG_FPGA=1
+DEBUG_FPGA=0
 OUTPUT_REF=0
+SOC=0
 
 ARCH= -gencode arch=compute_30,code=sm_30 \
       -gencode arch=compute_35,code=sm_35 \
@@ -28,15 +30,27 @@ endif
 EXEC=darknet
 OBJDIR=./obj/
 
+ifeq ($(SOC), 1) 
+CC=aarch64-linux-gnu-gcc
+CPP=aarch64-linux-gnu-g++
+else
 CC=gcc
 CPP=g++
+endif
 NVCC=nvcc 
 AR=ar
 ARFLAGS=rcs
 OPTS=-Ofast
+CFLAGS=-Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC
+ifeq ($(SOC), 1) 
+LDFLAGS = -I${SYSROOT}/usr/include/xrt -L${SYSROOT}/usr/lib -lOpenCL -lpthread -lrt -lstdc++ --sysroot=${SYSROOT}
+COMMON= -Iinclude/ -Isrc/
+COMMON+= -DSOC=1
+CFLAGS+= -DSOC=1
+else
 LDFLAGS= -lm -pthread  -lxilinxopencl -L $(XILINX_XRT)/lib
 COMMON= -Iinclude/ -Isrc/ -I $(XILINX_XRT)/include
-CFLAGS=-Wall -Wno-unused-result -Wno-unknown-pragmas -Wfatal-errors -fPIC
+endif
 
 ifeq ($(OPENMP), 1) 
 CFLAGS+= -fopenmp
@@ -56,12 +70,13 @@ COMMON+= `pkg-config --cflags opencv`
 endif
 
 ifeq ($(FPGA), 1) 
-COMMON+= -DFPGA  -O3 -Wno-deprecated-declarations
+COMMON+= -DFPGA  -O3 -Wno-deprecated-declarations -lm
 CFLAGS+= -DFPGA 
 LDFLAGS+= -L. -lkernel
 
 VENDOR=XILINX
 #DEVICE=vitis::zcu102_base
+#DEVICE=vitis::xilinx_zcu102_base_202010_1
 #DEVICE=sdaccel::xilinx_u250_xdma_201830_2
 DEVICE=vitis::xilinx_u250_xdma_201830_2
 
@@ -90,13 +105,23 @@ ATTRIBUTE += --attribute stream_prefetch=off
 ATTRIBUTE += --attribute coarse_grained_parallel=off
 ATTRIBUTE += --attribute reduction_general=off
 
-N16_LINE:=208
-ONCHIP_SIZE:=52
+# N16xh:same with python config
+N16_LINE:=104
+# pingpang buffer size for input burst
+# 13: 13 * 16 * 512 * 8bit / 512 bus
+# 26: 26 * 28 * 256 * 8bit / 512 bus
+# 52: 52 * 52 * 192 * 8bit / 512 bus (192 becausue of one 384 channel layer)
+ONCHIP_SIZE:=13
 N16_LINE_ATT = -DN16_LINE=$(N16_LINE)
 ONCHIP_SIZE_ATT = -DONCHIP_SIZE=$(ONCHIP_SIZE)
 
 CMP_OPT=-d11 -DFPGA   $(ATTRIBUTE) $(ONCHIP_SIZE_ATT) $(N16_LINE_ATT)  -D AP_INT_MAX_W=4096
 LNK_OPT=-d11
+
+ifeq ($(FPGA_SIM), 1)
+LNK_OPT+= -DFPGA_SIM
+CMP_OPT+= -DFPGA_SIM
+endif
 
 ifeq ($(DEBUG_CPU), 1) 
 
@@ -117,8 +142,8 @@ CFLAGS+= -DCPU
 endif
 
 
-ifeq ($(DEBUG_FPGA), 1) 
 CMP_OPT+= -DDSP_PACK
+ifeq ($(DEBUG_FPGA), 1) 
 #CMP_OPT+= -DDEBUG_BURST
 #CMP_OPT+= -DDEBUG_WEIGHT
 #CMP_OPT+= -DDEBUG_CONV
@@ -198,11 +223,9 @@ clean:
 config_gen:
 	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
 
-acc:
-	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
-	merlincc -c $(KERNEL_SRC_FILES) -DXILINX -o $(KERNEL_NAME) $(CMP_OPT) --platform=$(DEVICE)
-
 runsim:
+	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
+	merlincc -c $(KERNEL_SRC_FILES) -DXILINX -DRUNSIM -o $(KERNEL_NAME) $(CMP_OPT) --platform=$(DEVICE)
 	merlincc $(KERNEL_NAME).mco -march=sw_emu -D MCC_SIM -o kernel_top $(LNK_OPT) --platform=$(DEVICE)
 
 estimate:
@@ -211,12 +234,15 @@ estimate:
 runhw:
 	merlincc $(KERNEL_NAME).mco -march=hw_emu -D MCC_SIM -o kernel_top $(LNK_OPT) --platform=$(DEVICE)
 	XCL_EMULATION_MODE=hw_emu ./$(EXEC) $(EXE_ARGS)
+
 bitgen:
+	python3 python/parse_cfg.py --cfg cfg/yolov3_q.cfg --N16xh $(N16_LINE)
+	merlincc -c $(KERNEL_SRC_FILES) -DXILINX -DBITGEN -o $(KERNEL_NAME) $(CMP_OPT) --platform=$(DEVICE)
 	merlincc $(KERNEL_NAME).mco -o kernel_top_hw.xclbin -d11 --platform=$(DEVICE)
 
 libgen:
 	rm -rf lib_gen/bin/libkernel.so;
-	cd lib_gen; make lib_gen; cd -;
+	cd lib_gen; make lib_gen SOC=$(SOC); cd -;
 	cp lib_gen/bin/libkernel.so .;
 
 runall:
@@ -227,6 +253,9 @@ runtest:
 
 run0:
 	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 0 0 0 16
+
+run56:
+	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 56 56 0 16
 
 run58:
 	XCL_EMULATION_MODE=sw_emu ./$(EXEC) $(EXE_ARGS) 58 58 0 16
