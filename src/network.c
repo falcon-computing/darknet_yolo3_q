@@ -354,7 +354,7 @@ void forward_network_fpga(network *netp, int * test_cfg)
     printf("testing cfg = %d %d %d %d\n", layer_min, layer_max, debug_layer, cfg_filter);
     #endif
     network net = *netp;
-    DATA_T * layer_0_in = malloc(sizeof(DATA_T)*416*416*3*batch);
+    DATA_T * layer_0_in = malloc(sizeof(DATA_T)*416*416*3);
     float* yolo1_out = calloc(12675*batch, sizeof(float)); 
     float* yolo2_out = calloc(50700*batch, sizeof(float)); 
     float* yolo3_out = calloc(202800*batch, sizeof(float)); 
@@ -458,12 +458,13 @@ void forward_network_fpga(network *netp, int * test_cfg)
     //TODO: in batch mode, it need to add offset for input images
     net.index = 0;
     layer l0 = net.layers[0];
-    for(p = 0; p < batch; p++){
+    //for(p = 0; p < batch; p++){
         for(m = 0; m < l0.inputs; m++){
             layer_0_in[m] = net.input[m];
         }
-    }
+    //}
     //write_data_file(300, layer_0_in, l0.inputs);//debug layer  
+    //write_data_file_int8_input(998, layer_0_in, sizeof(DATA_T)*416*416*3);//debug layer  
     
     //===========================================//
     //loading weight and bias to global memory, only need once for different images
@@ -548,15 +549,17 @@ void forward_network_fpga(network *netp, int * test_cfg)
     debug_config[4] = 416;
     debug_config[5] = 3;
 
-    DATA_T * batched_layer_0_in = malloc(sizeof(DATA_T)*416*416*3*2);
-    memcpy(batched_layer_0_in, layer_0_in, 416 * 416 * 3);
-    memcpy(batched_layer_0_in + (416 * 416 * 3), layer_0_in, 416 * 416 * 3 * sizeof(DATA_T));
-    float* batched_yolo1_out = calloc(12675*2, sizeof(float)); 
-    float* batched_yolo2_out = calloc(50700*2, sizeof(float)); 
-    float* batched_yolo3_out = calloc(202800*2, sizeof(float));
+    batch = 4;
+    DATA_T * batched_layer_0_in = malloc(sizeof(DATA_T)*416*416*3*batch);
+    for(p = 0; p < batch; p++) {
+        memcpy(batched_layer_0_in + (416 * 416 * 3) * p, layer_0_in, 416 * 416 * 3 * sizeof(DATA_T));
+    }
+    float* batched_yolo1_out = calloc(12675*batch, sizeof(float)); 
+    float* batched_yolo2_out = calloc(50700*batch, sizeof(float)); 
+    float* batched_yolo3_out = calloc(202800*batch, sizeof(float));
     
     //__merlin_exec_top_kernel_overlap(layer_0_in, yolo1_out, yolo2_out, yolo3_out, batch, debug_config);
-    __merlin_exec_top_kernel_overlap(batched_layer_0_in, batched_yolo1_out, batched_yolo2_out, batched_yolo3_out, 2, debug_config);
+    __merlin_exec_top_kernel_overlap(batched_layer_0_in, batched_yolo1_out, batched_yolo2_out, batched_yolo3_out, batch, debug_config);
     memcpy(yolo1_out, batched_yolo1_out + 12675, 12675 * sizeof(float));
     memcpy(yolo2_out, batched_yolo2_out + 50700, 50700 * sizeof(float));
     memcpy(yolo3_out, batched_yolo3_out + 202800, 202800 * sizeof(float));

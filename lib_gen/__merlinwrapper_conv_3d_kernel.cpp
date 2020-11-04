@@ -230,12 +230,13 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
     printf("w:%d, h:%d, c:%d\n", config_list_all[layer_min][0][1], config_list_all[layer_min][0][2], layer_c);
 #endif
 
-    int config_format[5];
-    config_format[0] = config_list_all[layer_min][0][1];
-    config_format[1] = config_list_all[layer_min][0][2];
-    config_format[2] = layer_c;
-    config_format[3] = ((layer_c + PARALLEL_FILTER - 1)/PARALLEL_FILTER)*PARALLEL_FILTER;
-    config_format[4] = PARALLEL_FILTER;
+    int config_format_out[5];
+    int config_format_in[5];
+    config_format_in[0] = config_list_all[layer_min][0][1];
+    config_format_in[1] = config_list_all[layer_min][0][2];
+    config_format_in[2] = layer_c;
+    config_format_in[3] = ((layer_c + PARALLEL_FILTER - 1)/PARALLEL_FILTER)*PARALLEL_FILTER;
+    config_format_in[4] = PARALLEL_FILTER;
     DATA_T * layer_0_in_format[2]; 
     for(i=0; i<OVERLAP; i++) {
         layer_0_in_format[i] = (DATA_T*)malloc(config_list_all[layer_min][0][17] * sizeof(DATA_T));
@@ -310,24 +311,24 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             DATA_T * yolo1_pre = (DATA_T *)malloc(sizeof(DATA_T) * config_list_all[58][2][8] * config_list_all[58][2][6] * config_list_all[58][2][7]);
             DATA_T * yolo2_pre = (DATA_T *)malloc(sizeof(DATA_T) * config_list_all[66][2][8] * config_list_all[66][2][6] * config_list_all[66][2][7]);
             DATA_T * yolo3_pre = (DATA_T *)malloc(sizeof(DATA_T) * config_list_all[74][2][8] * config_list_all[74][2][6] * config_list_all[74][2][7]);
-            config_format[0] = 16;
-            config_format[1] = 13;
-            config_format[2] = 80;
-            config_format[3] = 80;
-            config_format[4] = PARALLEL_FILTER;
-            data_format_transform_back(yolo1_pre_format, yolo1_pre, config_format);
-            config_format[0] = 28;
-            config_format[1] = 26;
-            config_format[2] = 80;
-            config_format[3] = 80;
-            config_format[4] = PARALLEL_FILTER;
-            data_format_transform_back(yolo2_pre_format, yolo2_pre, config_format);
-            config_format[0] = 52;
-            config_format[1] = 52;
-            config_format[2] = 80;
-            config_format[3] = 80;
-            config_format[4] = PARALLEL_FILTER;
-            data_format_transform_back(yolo3_pre_format, yolo3_pre, config_format);
+            config_format_out[0] = 16;
+            config_format_out[1] = 13;
+            config_format_out[2] = 80;
+            config_format_out[3] = 80;
+            config_format_out[4] = PARALLEL_FILTER;
+            data_format_transform_back(yolo1_pre_format, yolo1_pre, config_format_out);
+            config_format_out[0] = 28;
+            config_format_out[1] = 26;
+            config_format_out[2] = 80;
+            config_format_out[3] = 80;
+            config_format_out[4] = PARALLEL_FILTER;
+            data_format_transform_back(yolo2_pre_format, yolo2_pre, config_format_out);
+            config_format_out[0] = 52;
+            config_format_out[1] = 52;
+            config_format_out[2] = 80;
+            config_format_out[3] = 80;
+            config_format_out[4] = PARALLEL_FILTER;
+            data_format_transform_back(yolo3_pre_format, yolo3_pre, config_format_out);
 #ifdef DEBUG_LIB
             printf("data transform back %f seconds.\n", what_time_is_it_now()-time); 
 #endif
@@ -345,9 +346,9 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
             printf("3 yolos in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
 #ifdef DEBUG_LIB
-            write_data_file_float(82 + 200*(frame_cnt - overlap), yolo1_out + (frame_cnt - overlap) * 12675,  12675);
-            write_data_file_float(94 + 200*(frame_cnt - overlap), yolo2_out + (frame_cnt - overlap) * 50700,  50700);
-            write_data_file_float(106+ 200*(frame_cnt - overlap), yolo3_out + (frame_cnt - overlap) * 202800, 202800);
+            write_data_file_float(82 + 100*(frame_cnt - overlap), yolo1_out + (frame_cnt - overlap) * 12675,  12675);
+            write_data_file_float(94 + 100*(frame_cnt - overlap), yolo2_out + (frame_cnt - overlap) * 50700,  50700);
+            write_data_file_float(106+ 100*(frame_cnt - overlap), yolo3_out + (frame_cnt - overlap) * 202800, 202800);
             printf("finish yolo-1\n");
             printf("finish yolo-2\n");
             printf("finish yolo-3\n");
@@ -365,13 +366,13 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #else
                 memcpy(layer_x_out_format, data_input[queue_idx].data() + config_list_all[layer_x][2][29]*WIDE_BUS_WIDTH/ORG_DATA_WIDTH, size_x * sizeof(DATA_T));
 #endif //SOC
-                config_format[0] = config_list_all[layer_x][2][8];
-                config_format[1] = config_list_all[layer_x][2][6];
-                config_format[2] = config_list_all[layer_x][2][7];
-                config_format[3] = config_list_all[layer_x][2][7];
-                config_format[4] = PARALLEL_FILTER;
+                config_format_in[0] = config_list_all[layer_x][2][8];
+                config_format_in[1] = config_list_all[layer_x][2][6];
+                config_format_in[2] = config_list_all[layer_x][2][7];
+                config_format_in[3] = config_list_all[layer_x][2][7];
+                config_format_in[4] = PARALLEL_FILTER;
                 DATA_T * layer_x_out = (DATA_T *)malloc(sizeof(DATA_T) * size_x);
-                data_format_transform_back(layer_x_out_format, layer_x_out, config_format);
+                data_format_transform_back(layer_x_out_format, layer_x_out, config_format_in);
                 int org_layer;
                 int data_size = config_list_all[layer_x][2][6]*config_list_all[layer_x][2][6]*config_list_all[layer_x][2][7];
                 if(layer_x == 58){
@@ -405,9 +406,10 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #endif
             //TODO: in batch mode, it need to add offset for input images
             int offset = frame_cnt * (416 * 416 *3); //frame_cnt * image_size;
-            data_format_transform(input + offset, layer_0_in_format[queue_idx], config_format);
+            //data_format_transform(input + offset, layer_0_in_format[queue_idx], config_format_in);
+            data_format_transform(input, layer_0_in_format[queue_idx], config_format_in);
 #ifdef DEBUG_LIB
-            write_data_file(0 + frame_cnt * 200, layer_0_in_format[queue_idx], config_list_all[layer_min][0][17]);//debug layer
+            write_data_file(0 + frame_cnt * 100, layer_0_in_format[queue_idx], config_list_all[layer_min][0][17]);//debug layer
             printf("first layer data transform in %f seconds.\n", what_time_is_it_now()-time); 
 #endif
 
