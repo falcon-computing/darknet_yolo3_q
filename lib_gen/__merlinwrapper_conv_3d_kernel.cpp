@@ -406,8 +406,8 @@ int __merlin_exec_top_kernel_overlap(DATA_T * input,
 #endif
             //TODO: in batch mode, it need to add offset for input images
             int offset = frame_cnt * (416 * 416 *3); //frame_cnt * image_size;
-            //data_format_transform(input + offset, layer_0_in_format[queue_idx], config_format_in);
-            data_format_transform(input, layer_0_in_format[queue_idx], config_format_in);
+            data_format_transform(input + offset, layer_0_in_format[queue_idx], config_format_in);
+            //data_format_transform(input, layer_0_in_format[queue_idx], config_format_in);
 #ifdef DEBUG_LIB
             write_data_file(0 + frame_cnt * 100, layer_0_in_format[queue_idx], config_list_all[layer_min][0][17]);//debug layer
             printf("first layer data transform in %f seconds.\n", what_time_is_it_now()-time); 
