@@ -558,11 +558,16 @@ void forward_network_fpga(network *netp, int * test_cfg)
     float* batched_yolo2_out = calloc(50700*batch, sizeof(float)); 
     float* batched_yolo3_out = calloc(202800*batch, sizeof(float));
     
+    //FILE *pfp = fopen("inp_img.bin", "ab");
+    //fwrite(layer_0_in, sizeof(DATA_T), (416 * 416 *3), pfp);
+    FILE *pfp = fopen("inp_img.bin", "rb");
+    fread(batched_layer_0_in, sizeof(DATA_T), (416 * 416 *3) * 4, pfp);
+
     //__merlin_exec_top_kernel_overlap(layer_0_in, yolo1_out, yolo2_out, yolo3_out, batch, debug_config);
     __merlin_exec_top_kernel_overlap(batched_layer_0_in, batched_yolo1_out, batched_yolo2_out, batched_yolo3_out, batch, debug_config);
-    memcpy(yolo1_out, batched_yolo1_out + 12675, 12675 * sizeof(float));
-    memcpy(yolo2_out, batched_yolo2_out + 50700, 50700 * sizeof(float));
-    memcpy(yolo3_out, batched_yolo3_out + 202800, 202800 * sizeof(float));
+    memcpy(yolo1_out, batched_yolo1_out + 12675 * 3, 12675 * sizeof(float));
+    memcpy(yolo2_out, batched_yolo2_out + 50700 * 3, 50700 * sizeof(float));
+    memcpy(yolo3_out, batched_yolo3_out + 202800 * 3, 202800 * sizeof(float));
     
     #endif // DEBUG_CPU
     #endif

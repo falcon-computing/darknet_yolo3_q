@@ -4,19 +4,20 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-        
         {
             "name": "darknet",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/darknet",
-            "args": ["detect", "/Users/reza/Github/falcon_yolo_quantizer/model/gen/Yolov3_q.cfg", "/Users/reza/Github/falcon_yolo_quantizer/model/gen/Yolov3_q.weights", "/Users/reza/Downloads/Dataset/VOC/test/VOCdevkit2/VOC2007/JPEGImages/000401.jpg", "-thresh", 0.01],
+            "args": ["detect", "/curr/reza/Projects/YOLOv3_quantization/config/Yolov3_q.cfg", "/curr/reza/Projects/YOLOv3_quantization/config/Yolov3_q.weights", "/curr/reza/Downloads/VOCdevkit/VOC2007/JPEGImages/000001.jpg", "-thresh", "0.01"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "externalConsole": false,
-            "MIMode": "lldb",
-            "preLaunchTask": "C/C++: gcc build active file"
+            "MIMode": "gdb",
+            "preLaunchTask": "C/C++: gcc build active file",
+            "miDebuggerPath": "/usr/bin/gdb"
+
         }
     ]
 }
