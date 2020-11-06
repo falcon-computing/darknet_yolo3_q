@@ -34,6 +34,122 @@
 #include "data.h"
 #define MAX_LINE 100
 
+void load_weights_FPGA(network* net){
+    #if FPGA == 1
+    __merlin_init("kernel_top.xclbin");
+    //===========================================//
+    //get bias data
+    //===========================================//
+    int32_t bias_in[OUTPUT_LAYER_NUM][1024];
+    int l_cnt = 0;
+    for (l_cnt = 0; l_cnt < OUTPUT_LAYER_NUM; l_cnt++)
+    {
+        net->index = index_conv[l_cnt];
+        get_bias_data(net->layers[index_conv[l_cnt]], bias_in[l_cnt]);
+#ifdef DEBUG_SIM
+        int i;
+        for (i = 0; i < net->layers[index_conv[l_cnt]].n; i++)
+        {
+            bias_in[l_cnt][i] = 0;
+        }
+#endif
+    }
+#if DEBUG_FPGA == 1
+    printf("collect bias finished\n");
+#endif
+
+    //===========================================//
+    //get convolution weight
+    //the 1st layer, only channel depth is 3, need extend to 16 to match parallel channel computation
+    //the other layers, only do data transformat
+    //===========================================//
+    int m, p, q, r;
+    DATA_T *weights_in[OUTPUT_LAYER_NUM];
+    int weight_size = 0;
+    int config_format[5]; // this is for data transformat purpose
+    //layer_0_weights special process, 3 channels->16 channels
+    {
+        weight_size = config_list_all[0][0][0] * config_list_all[0][0][0] * PARALLEL_FILTER * config_list_all[0][0][7];
+        DATA_T *weights_layer_0 = (DATA_T *)malloc(weight_size * sizeof(DATA_T));
+        int l0_n = net->layers[0].n;
+        int l0_c = net->layers[0].c;
+        int l0_size = net->layers[0].size;
+        for (m = 0; m < l0_n; m++)
+        {
+            for (p = 0; p < PARALLEL_FILTER; p++)
+            {
+                for (q = 0; q < l0_size; q++)
+                {
+                    for (r = 0; r < l0_size; r++)
+                    {
+                        int index_out = m * PARALLEL_FILTER * l0_size * l0_size + p * l0_size * l0_size + q * l0_size + r;
+                        int index_in = m * l0_c * l0_size * l0_size + p * l0_size * l0_size + q * l0_size + r;
+                        if (p < l0_c)
+                        {
+                            weights_layer_0[index_out] = net->layers[0].weights[index_in];
+                        }
+                        else
+                        {
+                            weights_layer_0[index_out] = 0;
+                        }
+#ifdef DEBUG_SIM
+                        weights_layer_0[index_out] = m + 1;
+#endif
+                    }
+                }
+            }
+        }
+        config_format[0] = config_list_all[0][0][0] * config_list_all[0][0][0];
+        config_format[1] = PARALLEL_FILTER;
+        config_format[2] = config_list_all[0][0][7];
+        config_format[3] = config_list_all[0][0][7];
+        config_format[4] = PARALLEL_FILTER;
+        weights_in[0] = (DATA_T *)malloc(weight_size * sizeof(DATA_T));
+        data_format_transform(weights_layer_0, weights_in[0], config_format);
+    }
+#if DEBUG_FPGA == 1
+    printf("transform weights[0] finished\n");
+#endif
+
+    //copy other layer's weight
+    for (l_cnt = 1; l_cnt < OUTPUT_LAYER_NUM; l_cnt++)
+    {
+        net->index = index_conv[l_cnt];
+        config_format[0] = config_list_all[l_cnt][0][0] * config_list_all[l_cnt][0][0];
+        config_format[1] = config_list_all[l_cnt][0][3];
+        config_format[2] = config_list_all[l_cnt][0][7];
+        config_format[3] = config_list_all[l_cnt][0][7];
+        config_format[4] = PARALLEL_FILTER;
+        weight_size = config_format[0] * config_format[1] * config_format[2];
+        weights_in[l_cnt] = (DATA_T *)malloc(weight_size * sizeof(DATA_T));
+#ifdef DEBUG_SIM
+        int l_c = config_list_all[l_cnt][0][3];
+        int l_n = config_list_all[l_cnt][0][7];
+        int l_size = config_list_all[l_cnt][0][0];
+        for (m = 0; m < l_n; m++)
+        {
+            for (p = 0; p < l_c; p++)
+            {
+                for (q = 0; q < l_size; q++)
+                {
+                    for (r = 0; r < l_size; r++)
+                    {
+                        net.layers[net.index].weights[m * l_c * l_size * l_size + p * l_size * l_size + q * l_size + r] = m + 1;
+                    }
+                }
+            }
+        }
+#endif
+        data_format_transform(net->layers[net->index].weights, weights_in[l_cnt], config_format);
+    }
+#if DEBUG_FPGA == 1
+    printf("transform weights finished\n");
+#endif
+    __merlin_load_weight(weights_in, bias_in);
+
+#endif
+}
+
 void write_data_file(int layer, DATA_T * value, int size) {
     char file_name[] = "output_layerXXX.dat";
     file_name[12] = layer/100 + '0';

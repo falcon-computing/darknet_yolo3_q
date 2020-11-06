@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 extern void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen, int *test_cfg);
-
+extern void test_batch_FPGA(char *datacfg, char *cfgfile, char *weightfile, char *in_path, float thresh, float hier_thresh, char *out_path, int fullscreen, int * test_cfg, int batch_size);
 extern void predict_classifier(char *datacfg, char *cfgfile, char *weightfile, char *filename, int top);
 //extern void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen);
 extern void run_yolo(int argc, char **argv);
@@ -448,7 +448,28 @@ int main(int argc, char **argv)
             printf("get input data: %d, %d, %d, %d", test_cfg[0], test_cfg[1], test_cfg[2], test_cfg[3]);
         }
         test_detector("cfg/voc.data", argv[2], argv[3], filename, .3, .3, outfile, fullscreen, test_cfg);
-    } else if (0 == strcmp(argv[1], "cifar")){
+    } else if (0 == strcmp(argv[1], "batch")){
+        float thresh = find_float_arg(argc, argv, "-thresh", .5);
+        int batch_size = find_int_arg(argc, argv, "-batch", 1);
+        char *in_path = (argc > 4) ? argv[4]: 0;
+        char *out_path = (argc > 5) ? argv[5]: 0;
+        char *outfile = find_char_arg(argc, argv, "-out", 0);
+        int fullscreen = find_arg(argc, argv, "-fullscreen");
+        int test_cfg[10];
+        test_cfg[0] = 0;
+        test_cfg[1] = 74;
+        test_cfg[2] = 0;
+        test_cfg[3] = 16;
+        if(argc > 10) {
+            test_cfg[0] = atoi(argv[6]);
+            test_cfg[1] = atoi(argv[7]);
+            test_cfg[2] = atoi(argv[8]);
+            test_cfg[3] = atoi(argv[9]);
+            printf("get input data: %d, %d, %d, %d", test_cfg[0], test_cfg[1], test_cfg[2], test_cfg[3]);
+        }
+        test_batch_FPGA("cfg/voc.data", argv[2], argv[3], in_path, thresh, 0.3, out_path, fullscreen, test_cfg, batch_size);
+    }
+     else if (0 == strcmp(argv[1], "cifar")){
         run_cifar(argc, argv);
     } else if (0 == strcmp(argv[1], "go")){
         run_go(argc, argv);

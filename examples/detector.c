@@ -1,3 +1,4 @@
+#include <dirent.h>
 #include "darknet.h"
 
 static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
@@ -557,7 +558,68 @@ void validate_detector_recall(char *cfgfile, char *weightfile)
         free_image(sized);
     }
 }
+void load_weights_FPGA();
+void test_batch_FPGA(char *datacfg, char *cfgfile, char *weightfile, char *in_path, float thresh, float hier_thresh, char *out_path, int fullscreen, int * test_cfg, int batch_size){
+    list *options = read_data_cfg(datacfg);
+    char *name_list = option_find_str(options, "names", "data/names.list");
+    char **names = get_labels(name_list);
 
+    image **alphabet = load_alphabet();
+    network *net = load_network(cfgfile, weightfile, 0);
+    set_batch_network(net, 1);
+    srand(2222222);
+    double time;
+    char buff[256];
+    char *input = buff;
+    float nms = .45;
+
+    load_weights_FPGA(net);
+
+    // listing files in the input directory
+    DIR *in_images_dir;    
+    in_images_dir = opendir(in_path);
+    if (!in_images_dir){
+        printf("dir %s does not exist\n");
+        return;
+    }
+    int CLASS_COUNT = 20;
+    DATA_T *batched_layer_0_in = malloc(sizeof(DATA_T)*416*416*3*batch_size);  // we keep input batch data here
+    float *batched_yolo_s_out = (float*) malloc(sizeof(float)*13*13*3*(CLASS_COUNT+5)*batch_size);  // we keep input batch data here
+    float *batched_yolo_m_out = (float*) malloc(sizeof(float)*26*26*3*(CLASS_COUNT+5)*batch_size);  // we keep input batch data here
+    float *batched_yolo_l_out = (float*) malloc(sizeof(float)*52*52*3*(CLASS_COUNT+5)*batch_size);  // we keep input batch data here
+    int debug_config[10] = {0, 0, 0, 74, 416, 3};
+
+    int img_idx = -1;  // index of images being read
+    struct dirent *img_dir;
+    image org_img[batch_size];  // we store the original images here for later use and drawing bouding boxes!
+    while (1){
+        img_dir = readdir(in_images_dir);
+        if (!img_dir){
+            closedir(in_images_dir);
+            break;
+        }
+        img_idx = (img_idx + 1);
+        int img_arr_idx = img_idx % batch_size;
+        char *curr_image_path = img_dir->d_name;
+        image im = load_image_color(curr_image_path, 0, 0);
+        org_img[img_arr_idx] = im;
+        image sized = letterbox_image(im, net->w, net->h);
+        float *img_f_data = sized.data;
+
+        DATA_T *batch_start = &batched_layer_0_in[img_arr_idx * 416 * 416 * 3];
+        int i_b ;
+        for (i_b = 0; i_b < 416 * 416 * 3; ++i_b){
+            int unclip_inp = round(img_f_data[i_b] * 64);
+            unclip_inp = (unclip_inp < -128) ? -128 : unclip_inp;
+            DATA_T clip_inp = (unclip_inp > 127) ? 127 : unclip_inp;
+            batch_start[i_b] = clip_inp;
+        }
+        if (img_arr_idx + 1 % batch_size == 0){ // batch is ready
+        __merlin_exec_top_kernel_overlap(batched_layer_0_in, batched_yolo_s_out, batched_yolo_m_out, batched_yolo_m_out, batch_size, debug_config);
+        printf("one batch done\n");
+        }
+    }
+}
 
 void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen, int * test_cfg)
 {

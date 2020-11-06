@@ -1,3 +1,5 @@
+#ifndef CONFIG_16X16_Q_H_
+#define CONFIG_16X16_Q_H_
 #define OVERLAP            2
 #define COMPUTE_UNIT       1
 #define TILING_IMAGE       16
@@ -693,3 +695,4 @@ const int index_conv[75] = {
 	104, //layer 73
 	105 //layer 74
 };
+#endif
