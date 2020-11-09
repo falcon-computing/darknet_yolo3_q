@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/darknet",
-            "args": ["batch", "/curr/reza/Projects/YOLOv3_quantization/config/Yolov3_q.cfg", "/curr/reza/Projects/YOLOv3_quantization/config/Yolov3_q.weights", "/curr/reza/Downloads/VOCdevkit/VOC2007/JPEGImages/", "/curr/reza/temp/darknet_yolo3_q/results","-thresh", "0.01", "-batch", "2"],
+            "args": ["batch", "/curr/reza/Projects/YOLOv3_quantization/config/Yolov3_q.cfg", "/curr/reza/Projects/YOLOv3_quantization/config/Yolov3_q.weights", "/curr/reza/Downloads/VOCdevkit/VOC2007/JPEGImages/", "/curr/reza/temp/darknet_yolo3_q/results","-thresh", "0.1", "-batch", "4"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

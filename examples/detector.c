@@ -578,10 +578,12 @@ void test_batch_FPGA(char *datacfg, char *cfgfile, char *weightfile, char *in_pa
     // listing files in the input directory
     DIR *in_images_dir;    
     in_images_dir = opendir(in_path);
+
     if (!in_images_dir){
         printf("dir %s does not exist\n");
         return;
     }
+
     int CLASS_COUNT = 20;
     DATA_T *batched_layer_0_in = malloc(sizeof(DATA_T)*416*416*3*batch_size);  // we keep input batch data here
     float *batched_yolo_s_out = (float*) malloc(sizeof(float)*13*13*3*(CLASS_COUNT+5)*batch_size);  // we keep input batch data here
@@ -598,10 +600,19 @@ void test_batch_FPGA(char *datacfg, char *cfgfile, char *weightfile, char *in_pa
             closedir(in_images_dir);
             break;
         }
+        else if (strcmp(img_dir->d_name, ".") == 0 || strcmp(img_dir->d_name, "..") == 0){
+            continue;
+        }
+
+        char full_path[1024]="";
+
         img_idx = (img_idx + 1);
         int img_arr_idx = img_idx % batch_size;
-        char *curr_image_path = img_dir->d_name;
-        image im = load_image_color(curr_image_path, 0, 0);
+        char *image_name = img_dir->d_name;
+        strcat(full_path, in_path);
+        strcat(full_path, "/");
+        strcat(full_path, image_name);
+        image im = load_image_color(full_path, 0, 0);
         org_img[img_arr_idx] = im;
         image sized = letterbox_image(im, net->w, net->h);
         float *img_f_data = sized.data;
@@ -614,11 +625,52 @@ void test_batch_FPGA(char *datacfg, char *cfgfile, char *weightfile, char *in_pa
             DATA_T clip_inp = (unclip_inp > 127) ? 127 : unclip_inp;
             batch_start[i_b] = clip_inp;
         }
-        if (img_arr_idx + 1 % batch_size == 0){ // batch is ready
-        __merlin_exec_top_kernel_overlap(batched_layer_0_in, batched_yolo_s_out, batched_yolo_m_out, batched_yolo_m_out, batch_size, debug_config);
-        printf("one batch done\n");
+        if ((img_arr_idx + 1) % batch_size == 0)
+        { // batch is ready
+            __merlin_exec_top_kernel_overlap(batched_layer_0_in, batched_yolo_s_out, batched_yolo_m_out, batched_yolo_l_out, batch_size, debug_config);
+            for (i_b = 0; i_b < batch_size; ++i_b)
+            {
+                int i_q;
+                //yolo1
+                float *yolo1_out =  &batched_yolo_s_out[i_b * 13 * 13 * 3 * (5 + CLASS_COUNT)];
+                layer l = net->layers[82];
+                for (i_q = 0; i_q < l.outputs; ++i_q)
+                    l.yolo_out[i_q] = yolo1_out[i_q];
+                //yolo2
+                float *yolo2_out =  &batched_yolo_m_out[i_b * 26 * 26 * 3 * (5 + CLASS_COUNT)];
+                l = net->layers[94];
+                for (i_q = 0; i_q < l.outputs; ++i_q)
+                    l.yolo_out[i_q] = yolo2_out[i_q];
+                //yolo3
+                float *yolo3_out =  &batched_yolo_l_out[i_b * 52 * 52 * 3 * (5 + CLASS_COUNT)];
+                l = net->layers[106];
+                for (i_q = 0; i_q < l.outputs; ++i_q)
+                    l.yolo_out[i_q] = yolo3_out[i_q];
+
+                int nboxes = 0;
+                detection *dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes);
+                //printf("%d\n", nboxes);
+                //if (nms) do_nms_obj(boxes, probs, l.w*l.h*l.n, l.classes, nms);
+                if (nms)
+                    do_nms_sort(dets, nboxes, l.classes, nms);
+                draw_detections(org_img[i_b], dets, nboxes, thresh, names, alphabet, l.classes);
+                free_detections(dets, nboxes);
+
+                char out_file_path[1024] = "";
+                strcat(out_file_path, out_path);
+                strcat(out_file_path, "/");
+                char file_name[256];
+                sprintf(file_name, "%d", img_idx - batch_size + i_b + 1);
+                strcat(out_file_path, file_name);
+                save_image(org_img[i_b], out_file_path);
+                free_image(org_img[i_b]);                                
+            }
         }
     }
+
+#if FPGA == 1
+    __merlin_release();
+#endif
 }
 
 void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen, int * test_cfg)
