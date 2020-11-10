@@ -7,6 +7,11 @@ SHELL = /bin/bash
 RUNTIME_FLAGS := $(XILINX_SDX)/runtime/include/1_2
 RUNTIME_LINK := $(XILINX_SDX)/runtime/lib/x86_64
 
+ifeq ($(TF),1)
+TF_CFLAGS ?= $(shell python -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_compile_flags()))') 
+TF_LFLAGS ?= $(shell python -c 'import tensorflow as tf; print(" ".join(tf.sysconfig.get_link_flags()))') 
+endif
+
 ifeq ($(SOC), 1) 
 
 else
@@ -38,11 +43,16 @@ HOST_EXE_DIR = ./
 HOST_EXE = host_top
 
 SRCS := $(wildcard *.c *.cpp)
+ifeq ($(TF),0)
+SRCS := $(filter-out tf_yolo_op.cpp,$(SRCS))
+endif
+
 XFLAGS= -fPIC -DHLS_NO_XIL_FPO_LIB \
 		-I$(RUNTIME_FLAGS) \
 		-I$(VIVADO_INCLUDE) \
 		-I$(XILINX_SDX)/Vivado_HLS/include \
 		-I$(XILINX_SDX)/include \
+		$(TF_CFLAGS) \
 		-I../include \
 		-I../src \
 		-I../
@@ -50,6 +60,7 @@ ifeq ($(SOC), 1)
 LINK = -I${SYSROOT}/usr/include/xrt -L${SYSROOT}/usr/lib -lOpenCL -lpthread -lrt -lstdc++ --sysroot=${SYSROOT} -DSOC
 else
 LINK=   -L$(RUNTIME_LINK) \
+		$(TF_LFLAGS) \
 	    -lxilinxopencl\
 		-pthread -lrt -Wno-unused-label -Wno-narrowing -DVERBOSE -lstdc++  \
 		-std=gnu++0x -DLINUX_COMMANDS -fPIC -DIS_PIC \

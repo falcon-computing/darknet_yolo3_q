@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": ["path", "--batch", "4", "--img_path", "/curr/reza/Downloads/VOCdevkit/VOC2007/JPEGImages", "--out_path", "/curr/reza/temp/darknet_yolo3_q/results"]
+        },
+        {
             "name": "darknet",
             "type": "cppdbg",
             "request": "launch",

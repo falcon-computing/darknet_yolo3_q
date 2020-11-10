@@ -9,6 +9,7 @@ DEBUG_CPU=0
 DEBUG_FPGA=0
 OUTPUT_REF=0
 SOC=0
+TF=0
 
 ARCH= -gencode arch=compute_30,code=sm_30 \
       -gencode arch=compute_35,code=sm_35 \
@@ -233,7 +234,7 @@ bitgen:
 
 libgen:
 	rm -rf lib_gen/bin/libkernel.so;
-	cd lib_gen; make lib_gen SOC=$(SOC); cd -;
+	cd lib_gen; make lib_gen SOC=$(SOC) TF=$(TF); cd -;
 	cp lib_gen/bin/libkernel.so .;
 
 runall:

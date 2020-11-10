@@ -33,6 +33,7 @@
 #include "parser.h"
 #include "data.h"
 #define MAX_LINE 100
+#define GEN_BIN_WEIGHTS (0)
 
 void load_weights_FPGA(network* net){
     #if FPGA == 1
@@ -490,6 +491,15 @@ void forward_network_fpga(network *netp, int * test_cfg)
         }
         #endif
     }
+ #if(GEN_BIN_WEIGHTS)
+    FILE *fp = fopen("raw_bias.bin", "wb"); // this is the file containing the biases ready to be transfered to the FPGA
+    for (l_cnt = 0; l_cnt < OUTPUT_LAYER_NUM; l_cnt++)
+    {
+        fwrite(bias_in[l_cnt], sizeof(int32_t), 1024, fp);
+    }
+    fclose(fp);
+#endif   
+
     #if DEBUG_FPGA == 1
     printf("collect bias finished\n");
     #endif
@@ -536,6 +546,25 @@ void forward_network_fpga(network *netp, int * test_cfg)
         weights_in[0] = (DATA_T*)malloc(weight_size * sizeof(DATA_T));
         data_format_transform(weights_layer_0, weights_in[0], config_format);
     }
+
+ #if(GEN_BIN_WEIGHTS)
+    fp = fopen("raw_wgts.bin", "wb");
+    for (l_cnt = 0; l_cnt < OUTPUT_LAYER_NUM; ++l_cnt)
+    {
+        int weight_len = -1;
+        if (l_cnt == 0)
+        {
+            weight_len = config_list_all[0][0][0] * config_list_all[0][0][0] * PARALLEL_FILTER * config_list_all[0][0][7];
+        }
+        else
+        {
+            weight_len = config_list_all[l_cnt][0][0] * config_list_all[l_cnt][0][0] * config_list_all[l_cnt][0][3] * config_list_all[l_cnt][0][7];
+            ;
+        }
+        fwrite(weights_in[l_cnt], sizeof(DATA_T), weight_len, fp);
+    }
+    fclose(fp);
+#endif   
     #if DEBUG_FPGA == 1
     printf("transform weights[0] finished\n");
     #endif
