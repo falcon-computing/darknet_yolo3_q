@@ -5,7 +5,7 @@ OPENMP=0
 DEBUG=0
 FPGA=1
 FPGA_SIM=0
-DEBUG_CPU=1
+DEBUG_CPU=0
 DEBUG_FPGA=0
 OUTPUT_REF=0
 SOC=0
@@ -103,8 +103,10 @@ ATTRIBUTE += --vendor-options "-g"
 ATTRIBUTE += --attribute stream_prefetch=off
 
 # N16xh:same with python config
+# 52 / 104 / 208
 N16_LINE:=104
 # pingpang buffer size for input burst
+# 13 / 26 / 52
 # 13: 13 * 16 * 512 * 8bit / 512 bus
 # 26: 26 * 28 * 256 * 8bit / 512 bus
 # 52: 52 * 52 * 192 * 8bit / 512 bus (192 becausue of one 384 channel layer)

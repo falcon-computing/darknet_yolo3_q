@@ -440,6 +440,10 @@ void conv_1x1_core(
                     ap_int<27> w_tmp0 = 0;
                     w_tmp0(7,0)= weight0_tmp;
                     w_tmp0(26,8) = (weight0_tmp(7,7) == 1) ? 0x7ffff : 0;
+                    //w_tmp0(26,8) = (weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
+                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
+                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
+                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7));
                     ap_int<27> w_tmp1 = 0;
                     w_tmp1(17,0) = 0;
                     w_tmp1(25,18) = weight1_tmp;
@@ -838,6 +842,10 @@ void conv_3x3_core(
                     ap_int<27> w_tmp0 = 0;
                     w_tmp0(7,0)= weight0_tmp;
                     w_tmp0(26,8) = (weight0_tmp(7,7) == 1) ? 0x7ffff : 0;
+                    //w_tmp0(26,8) = (weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
+                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
+                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
+                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7));
                     ap_int<27> w_tmp1 = 0;
                     w_tmp1(25,18) = weight1_tmp;
                     w_tmp1(26,26) = weight1_tmp(7,7);
@@ -1605,6 +1613,7 @@ void read_fifo(
     //int out_h_4 = out_h % FACTORS;
 
     ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > tmp_buf[4];
+    ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > tmp_buf2[4];
     merlinL89:
     for (int i = 0; i < read_fifo_line; i++) {
         #pragma hls loop_tripcount min=208 max=208
@@ -1632,21 +1641,15 @@ void read_fifo(
             printf("debug4_image_out[%3d][%3d]=%d ", i%out_h, j*4+3, (tmp3_buf . to_int()));
     #endif
         }
-        for(int j = 0; j < FACTORS; j++){
-            #pragma hls loop_tripcount min=4 max=4
-            tmp_buf[j] = 0;
-        }
-        merlinL95:
-        for(int j = 0; j < out_h_4; j++){
-            #pragma hls loop_tripcount min=4 max=4
-            tmp_buf[j] = stream_data_in . read();
-        }
-        merlinL93:
-        for(int j = 0; j < out_w - out_h; j++){
-            #pragma hls loop_tripcount min=3 max=3
-            stream_data_in . read();
-        }
-        if(out_h_4 != 0){
+        if(out_h_4 != 0) {
+            for(int j = 0; j < FACTORS; j++){
+                #pragma hls loop_tripcount min=4 max=4
+                tmp_buf[j] = 0;
+            }
+            for(int j = 0; j < out_h_4; j++){
+                #pragma hls loop_tripcount min=4 max=4
+                tmp_buf[j] = stream_data_in . read();
+            }
             data_out[i * new_w / FACTORS + out_h / FACTORS] = (((tmp_buf[3] , tmp_buf[2] , tmp_buf[1])) , tmp_buf[0]);
     #ifdef DEBUG_DATAOUT
             printf("index[%3d] ", i * new_w / 4 + out_h / 4);
@@ -1660,6 +1663,12 @@ void read_fifo(
             ap_int< 8 > tmp3_buf = (tmp_buf[3](((p + 1) * 8 - 1), (p * 8)));
             printf("debug0_image_out[%3d][%3d]=%d ", i%out_h, (out_h / 4)*4+3, (tmp3_buf . to_int()));
     #endif
+        }
+        if(out_w != out_h) {
+            for(int j = 0; j < out_w - out_h; j++){
+                #pragma hls loop_tripcount min=3 max=3
+                stream_data_in . read();
+            }
         }
     #ifdef DEBUG_DATAOUT
         printf("\n");
