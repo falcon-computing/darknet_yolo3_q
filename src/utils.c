@@ -724,3 +724,117 @@ float **one_hot_encode(float *a, int n, int k)
     return t;
 }
 
+// if tile = 8
+// A0A1A2A3A4A5A6A7....
+// B0B1B2B3B4B5B6B7....
+// ......
+// H0H1H2H3H4H5H6H7....
+// ......
+// =========>
+// A0B0C0D0E0F0G0H0......
+// I0J0K0L0M0N0O0P0......
+// ......
+void data_format_transform(DATA_T *a, DATA_T *b, int *config) {
+    //printf("enter data transformation\n");
+    int h = config[0];
+    int w = config[1];
+    int c_in = config[2];
+    int c_out = config[3];
+    int tile = config[4];
+    int input_total_size = h * w * c_in;
+    int output_total_size = h * w * c_out;
+    int image_size = h * w;
+    int one_tile_size = h * w * tile;
+//    printf("h = %d, w = %d, c_in = %d, c_out = %d, tile = %d\n", h, w, c_in, c_out, tile);
+//    printf("input_total_size = %d, output_total_size = %d, image_size = %d, one_tile_size = %d\n", input_total_size, output_total_size, image_size, one_tile_size);
+    int i, j, k, i_sub;
+    for (i = 0; i < c_out/tile; i++) {
+        int total_tile_size = i * tile * h * w;
+        for (i_sub = 0; i_sub < tile; i_sub++) {
+            for (j = 0; j < h; j++) {
+                for (k = 0; k < w; k++) {
+                    int index1 = i_sub * h * w + j * w + k;
+                    int output_index = i * tile * h * w + index1;
+                    int input_index = total_tile_size + (index1 % tile) * image_size + index1 / tile;
+                    DATA_T tmp;
+                    if (input_index >= input_total_size) {
+                        tmp = 0.0;
+                    } else {
+                        tmp = a[input_index];
+                    }
+                    //printf("index1 = %d, output_index = %d, input_index = %d, tmp = %f\n", index1, output_index, input_index, tmp);
+                    b[output_index] = tmp;
+                }
+            }
+        }
+    }
+    FILE *fp_out;
+    char * output_file = "reformat.dat";
+    fp_out = fopen(output_file, "w");
+    if(fp_out == NULL) {
+        perror("fopen");
+        return;
+    }
+    for(i=0; i<output_total_size; i++) {
+        fprintf(fp_out, "%f\n", b[i]);
+    }
+    fclose(fp_out);
+}
+
+// if tile = 8
+// A0B0C0D0E0F0G0H0......
+// I0J0K0L0M0N0O0P0......
+// ......
+// =========>
+// A0A1A2A3A4A5A6A7....
+// B0B1B2B3B4B5B6B7....
+// ......
+// H0H1H2H3H4H5H6H7....
+// ......
+void data_format_transform_back(DATA_T *a, DATA_T *b, int *config) {
+    printf("enter data transformation back\n");
+    int h = config[0];
+    int w = config[1];
+    int c_in = config[2];
+    int c_out = config[3];
+    int tile = config[4];
+    int input_total_size = h * w * c_in;
+    int output_total_size = h * w * c_out;
+    int image_size = h * w;
+    int one_tile_size = h * w * tile;
+//    printf("h = %d, w = %d, c_in = %d, c_out = %d, tile = %d\n", h, w, c_in, c_out, tile);
+//    printf("input_total_size = %d, output_total_size = %d, image_size = %d, one_tile_size = %d\n", input_total_size, output_total_size, image_size, one_tile_size);
+    int i, j, k, i_sub;
+    for (i = 0; i < c_out/tile; i++) {
+        int total_tile_size = i * tile * h * w;
+        for (i_sub = 0; i_sub < tile; i_sub++) {
+            for (j = 0; j < h; j++) {
+                for (k = 0; k < w; k++) {
+                    int index1 = i_sub * h * w + j * w + k;
+                    int output_index = i * tile * h * w + index1;
+                    int input_index = total_tile_size + (index1 % image_size) * tile + index1 / image_size;
+                    DATA_T tmp;
+                    if (input_index >= input_total_size) {
+                        tmp = 0;
+                    } else {
+                        tmp = a[input_index];
+                    }
+                    //printf("index1 = %d, output_index = %d, input_index = %d, tmp = %f\n", index1, output_index, input_index, tmp);
+                    b[output_index] = tmp;
+                }
+            }
+        }
+    }
+    FILE *fp_out;
+    char * output_file = "reformat_back.dat";
+    fp_out = fopen(output_file, "w");
+    if(fp_out == NULL) {
+        perror("fopen");
+        return;
+    }
+    for(i=0; i<output_total_size; i++) {
+        fprintf(fp_out, "%f\n", b[i]);
+    }
+    fclose(fp_out);
+}
+

@@ -6,6 +6,8 @@
 #include <pthread.h>
 #include<math.h>
 
+typedef int8_t DATA_T;
+
 #ifdef GPU
 #define BLOCK 512
 
@@ -687,6 +689,7 @@ extern "C"
     data *tile_data(data orig, int divs, int size);
     data select_data(data *orig, int *inds);
 
+    void forward_network_fpga(network *net, int * test_cfg);
     void forward_network(network *net);
     void backward_network(network *net);
     void update_network(network *net);
@@ -815,6 +818,7 @@ extern "C"
     matrix network_predict_data(network *net, data test);
     image **load_alphabet();
     image get_network_image(network *net);
+    float *network_predict_fpga(network *net, float *input, int *test_cfg);
     float *network_predict(network *net, float *input);
 
     int network_width(network *net);

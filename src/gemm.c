@@ -100,6 +100,7 @@ void gemm_nn_q(int M, int N, int K, float ALPHA,
         int8_t *B, int ldb,
         int32_t *C, int ldc)
 {
+    //printf("M=%d K=%d N=%d\n", M, K, N);
     int i,j,k;
     #pragma omp parallel for
     for(i = 0; i < M; ++i){
@@ -107,9 +108,14 @@ void gemm_nn_q(int M, int N, int K, float ALPHA,
             register float A_PART = ALPHA*A[i*lda+k];
             for(j = 0; j < N; ++j){
                 C[i*ldc+j] += A_PART*B[k*ldb+j];
+                //if(j < 10) printf("[%d](%f)*(%d)=(%d)  ", j, A_PART, B[k*ldb+j], C[i*ldc+j]);
             }
+            //printf("\n");
         }
     }
+    //for(j = 0; j < 10; ++j)
+    //    printf("C[%3d]=%3d\n", j, C[j]);
+    //return;
 }
 
 void gemm_nt(int M, int N, int K, float ALPHA, 
@@ -195,7 +201,7 @@ void gemm_cpu_q(int TA, int TB, int M, int N, int K, float ALPHA,
         float BETA,
         int32_t *C, int ldc)
 {
-    //printf("cpu: %d %d %d %d %d %f %d %d %f %d\n",TA, TB, M, N, K, ALPHA, lda, ldb, BETA, ldc);
+    //printf("cpu: TA=%d TB=%d M=%d N=%d K=%d ALPHA=%f lda=%d ldb=%d BETA=%f ldc=%d\n",TA, TB, M, N, K, ALPHA, lda, ldb, BETA, ldc);
     int i, j;
     for(i = 0; i < M; ++i){
         for(j = 0; j < N; ++j){
