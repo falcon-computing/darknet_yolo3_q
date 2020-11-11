@@ -51,3 +51,11 @@ pip install tensorflow==1.15.2
 pip install opencv-python
 python python/tf_demo.py path --batch 5 --img_path /local/hanhu/darknet_yolo3_q/image_in --out_path /local/hanhu/darknet_yolo3_q/image_out
 conda deactivate
+
+Current performance:
+1. U250: 109ms
+2. ZCU: 170ms
+
+Todo:
+1. Support Double Pump DSP
+2. Solve timing issue
