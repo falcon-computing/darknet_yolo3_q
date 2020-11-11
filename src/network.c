@@ -594,6 +594,9 @@ void forward_network_fpga(network *netp, int * test_cfg)
         }
         #endif
         data_format_transform(net.layers[net.index].weights, weights_in[l_cnt], config_format);
+        #if DEBUG_FPGA == 1
+        printf("transform weights[%d] finished\n", l_cnt);
+        #endif
     }
     #if DEBUG_FPGA == 1
     printf("transform weights finished\n");
@@ -721,8 +724,8 @@ void forward_network_fpga(network *netp, int * test_cfg)
     #endif
     gettimeofday(&tv_end, NULL);
     exe_time = (tv_end.tv_sec - tv_start.tv_sec) * 1000.0 + (tv_end.tv_usec - tv_start.tv_usec)/1000.0;                
-    printf("E2E time %f \n",exe_time);
-    
+    printf("E2E time %f ms \n",exe_time);
+
     //===========================================//
     //get yolo data to original data structure
     //===========================================//

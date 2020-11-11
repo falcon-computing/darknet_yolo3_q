@@ -1,3 +1,4 @@
+#define AP_INT_MAX_W 4096
 #include <ap_int.h>
 #include <hls_math.h>
 #include <hls_stream.h>
@@ -11,6 +12,10 @@ typedef float BIAS_DT;
 typedef ap_int< ORG_DATA_WIDTH*2 > IMAGE_2DT;
 typedef ap_int< ORG_DATA_WIDTH*4 > IMAGE_4DT;
 typedef ap_int< ORG_DATA_WIDTH*8 > IMAGE_8DT;
+typedef ap_int< ORG_DATA_WIDTH*16 > IMAGE_16DT;
+typedef ap_int< ORG_DATA_WIDTH*32 > IMAGE_32DT;
+typedef ap_int< ORG_DATA_WIDTH*64 > IMAGE_64DT;
+typedef ap_int< ORG_DATA_WIDTH*256 > IMAGE_256DT;
 typedef ap_int< ORG_DATA_WIDTH*4 > CONV_DT;
 
 template <typename To, typename From>
@@ -403,10 +408,10 @@ void conv_1x1_core(
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_data_in,
 #ifdef DSP_PACK
     IMAGE_2DT weights_in[PARALLEL_FILTER/2][TILING_IMAGE],
-    IMAGE_8DT sum_buffer[PARALLEL_FILTER/2][2*SPLITING_FACTOR*208],
+    IMAGE_8DT sum_buffer[PARALLEL_FILTER/2][26*208],
 #else
     IMAGE_DT weights_in[PARALLEL_FILTER][TILING_IMAGE],
-    IMAGE_4DT sum_buffer[PARALLEL_FILTER][2*SPLITING_FACTOR*208],
+    IMAGE_4DT sum_buffer[PARALLEL_FILTER][26*208],
 #endif
     int one_compute_iter,
     bool init,
@@ -437,24 +442,38 @@ void conv_1x1_core(
                     IMAGE_DT image_tmp = (buf_input(((f*PARALLEL_FILTER + l + 1) * ORG_DATA_WIDTH - 1), ((f*PARALLEL_FILTER + l) * ORG_DATA_WIDTH)));
                     IMAGE_DT weight0_tmp = weights_in[p][l](7,0);
                     IMAGE_DT weight1_tmp = weights_in[p][l](15,8);
-                    ap_int<27> w_tmp0 = 0;
-                    w_tmp0(7,0)= weight0_tmp;
-                    w_tmp0(26,8) = (weight0_tmp(7,7) == 1) ? 0x7ffff : 0;
-                    //w_tmp0(26,8) = (weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7));
-                    ap_int<27> w_tmp1 = 0;
-                    w_tmp1(17,0) = 0;
-                    w_tmp1(25,18) = weight1_tmp;
-                    w_tmp1(26,26) = weight1_tmp(7,7);
+                    bool flag0 = weight0_tmp(7, 7);
+                    bool flag1 = weight1_tmp(7, 7);
+                    bool flag2 = image_tmp(7, 7);
 
-                    ap_int<27> w_tmp = w_tmp0 + w_tmp1;
-                    ap_int<18> s_tmp = image_tmp;
+                    ap_uint<26> w_tmp;
+                    ap_uint<8> w_tmp_reg0;
+                    ap_uint<8> w_tmp_reg1;
+                    if(flag0 == 1)
+                        w_tmp_reg0( 7, 0) = ~weight0_tmp( 7, 0) + 1;
+                    else
+                        w_tmp_reg0( 7, 0) = weight0_tmp( 7, 0);
+                    w_tmp(7, 0) = w_tmp_reg0( 7, 0);
+                    w_tmp(17, 8) = 0;
 
-                    ap_int<44> r_tmp = w_tmp * s_tmp;
+                    if(flag1 == 1)
+                        w_tmp_reg1(7,0) = ~weight1_tmp(7,0) + 1;
+                    else
+                        w_tmp_reg1(7,0) = weight1_tmp(7,0);
+                    w_tmp(25,18) = w_tmp_reg1(7,0);
+
+                    ap_int<8> s_tmp;
+                    if(flag2 == 1)
+                        s_tmp = ~image_tmp + 1;
+                    else
+                        s_tmp = image_tmp;
+                    ap_int<44> r_tmp = s_tmp * w_tmp;
                     IMAGE_2DT sum0_tmp = r_tmp(15,0);
-                    IMAGE_2DT sum1_tmp = r_tmp(33,18) + r_tmp(17,17);
+                    IMAGE_2DT sum1_tmp = r_tmp(33,18);
+                    if(flag0 != flag2)
+                        sum0_tmp = ~sum0_tmp + 1;
+                    if(flag1 != flag2)
+                        sum1_tmp = ~sum1_tmp + 1;
                     result_sum0 += sum0_tmp;
                     result_sum1 += sum1_tmp;
 #ifdef DEBUG_CONV
@@ -544,10 +563,10 @@ void conv_1x1_stream(
     int one_compute_iter = config_list[26];//out_w * 13;
     int out_h_13 = config_list[27];//out_h/SPLITING_FACTOR
 #ifdef DSP_PACK
-    IMAGE_8DT sum_buffer[PARALLEL_FILTER/2][2*SPLITING_FACTOR*208];
+    IMAGE_8DT sum_buffer[PARALLEL_FILTER/2][26*208];
     IMAGE_2DT weights_in[PARALLEL_FILTER/2][TILING_IMAGE];
 #else
-    IMAGE_4DT sum_buffer[PARALLEL_FILTER][2*SPLITING_FACTOR*208];
+    IMAGE_4DT sum_buffer[PARALLEL_FILTER][26*208];
     IMAGE_DT weights_in[PARALLEL_FILTER][TILING_IMAGE];
 #endif
 
@@ -604,51 +623,42 @@ void conv_1x1_stream(
 
 void burst_in_weights(
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_weights, 
-    int size, 
-    #ifdef DSP_PACK
-    IMAGE_2DT weights_in[PARALLEL_FILTER/2][3*3*TILING_IMAGE]
-    #else
-    IMAGE_DT weights_in[PARALLEL_FILTER][3*3*TILING_IMAGE]
-    #endif
+    IMAGE_256DT weights_in[3][3]
     )
 {
 
 #ifdef DEBUG_BURST
     printf("start_burst_in_weights \n");
 #endif
-
     #pragma ACCEL pipeline flatten
-    for (int i = 0; i < TILING_IMAGE * size * size / FACTORS; i++) {
-        ap_int< WIDE_BUS_WIDTH > w_buf = stream_weights.read();
-        for (int f = 0; f < FACTORS; f++) {
-            ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > w_buf_sub = w_buf(((f+1)*ORG_DATA_WIDTH*PARALLEL_FILTER-1),(f*ORG_DATA_WIDTH*PARALLEL_FILTER));
-            #ifdef DSP_PACK
-            for (int p = 0; p < PARALLEL_FILTER / 2; p++){
-            #else
-            for (int p = 0; p < PARALLEL_FILTER; p++){
-            #endif
-                #ifdef DSP_PACK
-                IMAGE_2DT tmp = w_buf_sub(((p + 1) * ORG_DATA_WIDTH * 2 - 1), (p * ORG_DATA_WIDTH * 2));
-                #else
-                IMAGE_DT tmp = w_buf_sub(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH));
-                #endif
-                weights_in[p][i * FACTORS + f] = tmp;
-#ifdef DEBUG_WEIGHT
-                IMAGE_DT a1 = tmp( 7,0);
-                IMAGE_DT a2 = tmp(15,8);
-                printf("load_weight[p%d][%3d]=%d ", p*2+0, i * FACTORS + f,(a1 . to_int()));
-                printf("load_weight[p%d][%3d]=%d ", p*2+1, i * FACTORS + f,(a2 . to_int()));
-#endif
+    for (int k = 0; k < 3; k++) {
+        for (int j = 0; j < 3; j++) {
+            for (int i = 0; i < TILING_IMAGE / FACTORS; i++) {
+                ap_int< WIDE_BUS_WIDTH > w_buf = stream_weights.read();
+                weights_in[k][j]((i + 1) * WIDE_BUS_WIDTH - 1, i*WIDE_BUS_WIDTH) = w_buf;
+//                for (int f = 0; f < FACTORS; f++) {
+//                    ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > w_buf_sub = w_buf(((f+1)*ORG_DATA_WIDTH*PARALLEL_FILTER-1),(f*ORG_DATA_WIDTH*PARALLEL_FILTER));
+//                    for (int p = 0; p < PARALLEL_FILTER / 2; p++){
+//                        IMAGE_2DT tmp = w_buf_sub(((p + 1) * ORG_DATA_WIDTH * 2 - 1), (p * ORG_DATA_WIDTH * 2));
+//                        weights_in[k][j][p][i * FACTORS + f] = tmp;
+//                        //#ifdef DEBUG_WEIGHT
+//                        //IMAGE_DT a1 = tmp( 7,0);
+//                        //IMAGE_DT a2 = tmp(15,8);
+//                        //printf("load_weight[p%d][%3d]=%d ", p*2+0, i * FACTORS + f,(a1 . to_int()));
+//                        //printf("load_weight[p%d][%3d]=%d ", p*2+1, i * FACTORS + f,(a2 . to_int()));
+//                        //#endif
+//                    }
+//#ifdef DEBUG_WEIGHT
+//                    printf("\n");
+//#endif
+//                }
             }
-#ifdef DEBUG_WEIGHT
-            printf("\n");
-#endif
         }
     }
 }
 
 void burst_in_line(
-    IMAGE_4DT line_buffer[TILING_IMAGE/4][3][420], 
+    IMAGE_16DT line_buffer[3][420], 
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_ping, 
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_pang, 
     bool &flag_fifo, int z, int in_w, int in_h, int split_h, int size, int stride, int pad,
@@ -689,27 +699,22 @@ void burst_in_line(
             } else{
                 input_buf = 0;
             }
-            IMAGE_4DT tmp_value[TILING_IMAGE/4];
+            IMAGE_16DT tmp_value;
 
             if(flag_w_pad == 0){
                 for(int f = 0; f < FACTORS; f++){
-                    merlinL41:
-                    for (int l = 0; l < TILING_IMAGE/4; l++) {
-                        tmp_value[l] = input_buf(((f*TILING_IMAGE + (l + 1)*4) * ORG_DATA_WIDTH - 1), ((f*TILING_IMAGE + l*4) * ORG_DATA_WIDTH));
-                        line_buffer[l][h + stride][f + w*FACTORS] = tmp_value[l];
-                    }
+                    tmp_value = input_buf(((f + 1) * 16 * ORG_DATA_WIDTH - 1), (f * 16 * ORG_DATA_WIDTH));
+                    line_buffer[h + stride][f + w*FACTORS] = tmp_value;
 #ifdef DEBUG_BURST
-                    ap_int< 8 > a = (line_buffer[0][h + stride][w*4+f](7, 0));
-                    printf("z%d burst_in [%3d]line_buffer[%3d][%3d] = %3d ", z,flag_fifo,h,w*4+f,(a . to_int()));
+//                    ap_int< 8 > a = (line_buffer[0][h + stride][w*4+f](7, 0));
+//                    printf("z%d burst_in [%3d]line_buffer[%3d][%3d] = %3d ", z,flag_fifo,h,w*4+f,(a . to_int()));
 #endif
                 }
             } else {
-                for (int l = 0; l < TILING_IMAGE/4; l++) {
-                    line_buffer[l][h + stride][0 + w*FACTORS] = 0;
-                }
+                line_buffer[h + stride][0 + w*FACTORS] = 0;
 #ifdef DEBUG_BURST
-                ap_int< 8 > a = (line_buffer[0][h + stride][w * 4 + 0](7,0));
-                printf("z%d burst_in [%3d]line_buffer[%3d][%3d] = %3d ",z,(int )((bool )flag_fifo),h,w * 4 + 0,(a . to_int()));
+//                ap_int< 8 > a = (line_buffer[0][h + stride][w * 4 + 0](7,0));
+//                printf("z%d burst_in [%3d]line_buffer[%3d][%3d] = %3d ",z,(int )((bool )flag_fifo),h,w * 4 + 0,(a . to_int()));
 #endif
             }
         }
@@ -726,15 +731,22 @@ void shift_in_data(
     bool &flag_fifo, int z, int in_w, int in_h, int split_h, int size, int stride, int pad, int new_h,
     int loop_h, int loop_w)
 {
-#ifdef DEBUG_BURST
     printf("start_shift_in_data \n");
+#ifdef DEBUG_BURST
     printf("in_w %d size %d pad %d, z %d, stride:%d\n",in_w,3,1,z,stride);
     printf("in_w %d in_h:%d, size %d pad %d, z %d, stride:%d\n",in_w,in_h,3,1,z,stride);
 #endif
+    int count0 = 0;
+    int count1 = 0;
     //int loop_h = new_h / stride;
     //int loop_w = in_w / FACTORS + pad - stride + 1;
     for (int h = 0; h < loop_h; h++) {
         #pragma HLS loop_tripcount min = 13 max = 13
+        //HAN first write 0 for pad
+        stream_shift_in[0][0] . write(0);
+        stream_shift_in[1][0] . write(0);
+        count0 += 1;
+        count1 += 1;
         #pragma ACCEL pipeline flatten
         for (int w = 0; w < loop_w; w++) {
             #pragma HLS loop_tripcount min = 105 max = 105
@@ -784,122 +796,128 @@ void shift_in_data(
                 buf_in[1][1] = input_buf[1]((128 * 1 + 127),(128 * 1));
                 buf_in[1][2] = input_buf[1]((128 * 2 + 127),(128 * 2));
                 buf_in[1][3] = input_buf[1]((128 * 3 + 127),(128 * 3));
-                if(in_w != 16 || w < 4) {
-                    stream_shift_in[0][0] . write(buf_in[0][0]);
-                    stream_shift_in[0][1] . write(buf_in[0][1]);
+                if(!(in_w == 16 && w >= 4) && !(in_w == 28 && w >= 7)) {
+                    stream_shift_in[0][1] . write(buf_in[0][0]);
+                    count0 += 1;
                 }
-                if(in_w != 16 || w < 3) {
-                    stream_shift_in[0][2] . write(buf_in[0][2]);
-                    stream_shift_in[0][3] . write(buf_in[0][3]);
+                if(!(in_w == 16 && w >= 4) && !(in_w == 28 && w >= 7)) {
+                    stream_shift_in[0][2] . write(buf_in[0][1]);
+                    count0 += 1;
                 }
-                if(in_w != 16 || w < 4) {
-                    stream_shift_in[1][0] . write(buf_in[1][0]);
-                    stream_shift_in[1][1] . write(buf_in[1][1]);
+                if(!(in_w == 16 && w >= 3) && !(in_w == 28 && w >= 7)) {
+                    stream_shift_in[0][3] . write(buf_in[0][2]);
+                    count0 += 1;
                 }
-                if(in_w != 16 || w < 3) {
-                    stream_shift_in[1][2] . write(buf_in[1][2]);
-                    stream_shift_in[1][3] . write(buf_in[1][3]);
+                if(!(in_w == 16 && w >= 3) && !(in_w == 28 && w >= 6)) {
+                    stream_shift_in[0][0] . write(buf_in[0][3]);
+                    count0 += 1;
                 }
-            } else {
-                if(in_w != 16) {
-                    stream_shift_in[0][0] . write(0);
-                    stream_shift_in[1][0] . write(0);
+                if(!(in_w == 16 && w >= 4) && !(in_w == 28 && w >= 7)) {
+                    stream_shift_in[1][1] . write(buf_in[1][0]);
+                    count1 += 1;
+                }
+                if(!(in_w == 16 && w >= 4) && !(in_w == 28 && w >= 7)) {
+                    stream_shift_in[1][2] . write(buf_in[1][1]);
+                    count1 += 1;
+                }
+                if(!(in_w == 16 && w >= 3) && !(in_w == 28 && w >= 7)) {
+                    stream_shift_in[1][3] . write(buf_in[1][2]);
+                    count1 += 1;
+                }
+                if(!(in_w == 16 && w >= 3) && !(in_w == 28 && w >= 6)) {
+                    stream_shift_in[1][0] . write(buf_in[1][3]);
+                    count1 += 1;
                 }
             }
         }
+        if (!(((in_w == 16 || in_w == 28) && stride == 1) || (in_w == 28 && stride == 2))) {        
+            stream_shift_in[0][1] . write(0);
+            stream_shift_in[1][1] . write(0);
+            count0 += 1;
+            count1 += 1;
+        }
     }
+    printf("finish_shift_in_data, count0 = %d, count1 = %d\n", count0, count1);
 #ifdef DEBUG_BURST
-    printf("finish_shift_in_data\n");
 #endif
 }
 
 void conv_3x3_core(
-    IMAGE_4DT shift[TILING_IMAGE/4][3][3],
-    #ifdef DSP_PACK
+    IMAGE_DT shift[TILING_IMAGE][3][3],
     IMAGE_2DT weights_in[TILING_IMAGE*3*3], 
     hls::stream< IMAGE_4DT > stream_sum_out[2], 
-    #else
-    IMAGE_DT weights_in[TILING_IMAGE*3*3], 
-    hls::stream< IMAGE_4DT > &stream_sum_out, 
-    #endif
-    int size)
-{
-    #ifdef DSP_PACK
+    int size) {
     IMAGE_4DT result_sum0 = 0;
     IMAGE_4DT result_sum1 = 0;
-    #else
-    IMAGE_4DT result_sum = 0;
-    #endif
-    for (int l = 0; l < TILING_IMAGE / 4; l++) {
-        for (int k = 0; k < 4; k++) {
-            for (int w = 0; w < size; w++) {
-                for (int h = 0; h < size; h++) {
-                #ifdef DSP_PACK
-                    IMAGE_DT image_tmp = shift[l][size - w - 1][h]((k+1)*8-1, k*8);
-                    IMAGE_2DT weights_tmp = weights_in[(l * 4 + k) * size * size + h * size + w];
-                    IMAGE_DT weight0_tmp = weights_tmp(7,0);
-                    IMAGE_DT weight1_tmp = weights_tmp(15,8);
-                    ap_int<27> w_tmp0 = 0;
-                    w_tmp0(7,0)= weight0_tmp;
-                    w_tmp0(26,8) = (weight0_tmp(7,7) == 1) ? 0x7ffff : 0;
-                    //w_tmp0(26,8) = (weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),
-                    //               weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7),weight0_tmp(7,7));
-                    ap_int<27> w_tmp1 = 0;
-                    w_tmp1(25,18) = weight1_tmp;
-                    w_tmp1(26,26) = weight1_tmp(7,7);
-
-                    ap_int<27> w_tmp = w_tmp0 + w_tmp1;
-                    ap_int<18> s_tmp = image_tmp;
-
-                    ap_int<44> r_tmp = w_tmp * s_tmp;
-                    IMAGE_2DT sum0_tmp = r_tmp(15,0);
-                    IMAGE_2DT sum1_tmp = r_tmp(33,18) + r_tmp(17,17);
-                    result_sum0 += sum0_tmp;
-                    result_sum1 += sum1_tmp;
+    for (int l = 0; l < TILING_IMAGE; l++) {
+        for (int w = 0; w < size; w++) {
+            for (int h = 0; h < size; h++) {
+                IMAGE_DT shift_tmp = shift[l][size - w - 1][h];
+                IMAGE_2DT weights_tmp = weights_in[l * size * size + h * size + w];
+                IMAGE_DT weight0_tmp = weights_tmp(7,0);
+                IMAGE_DT weight1_tmp = weights_tmp(15,8);
+                bool flag0 = weight0_tmp(7, 7);
+                bool flag1 = weight1_tmp(7, 7);
+                bool flag2 = shift_tmp(7, 7);
+                ap_uint<26> w_tmp;
+                ap_uint<8> w_tmp_reg0;
+                ap_uint<8> w_tmp_reg1;
+                if(flag0 == 1)
+                    w_tmp_reg0(7, 0) = ~weight0_tmp(7, 0) + 1;
+                else
+                    w_tmp_reg0(7, 0) = weight0_tmp(7, 0);
+                w_tmp(7, 0) = w_tmp_reg0(7, 0);
+                w_tmp(17, 8) = 0;
+                if(flag1 == 1)
+                    w_tmp_reg1(7, 0) = ~weight1_tmp(7, 0) + 1;
+                else
+                    w_tmp_reg1(7, 0) = weight1_tmp(7, 0);
+                w_tmp(25,18) = w_tmp_reg1(7, 0);
+                ap_int<8> s_tmp;
+                if(flag2 == 1)
+                    s_tmp(7,0) = ~shift_tmp(7,0) + 1;
+                else
+                    s_tmp(7,0) = shift_tmp(7,0);
+                ap_int<44> r_tmp = s_tmp * w_tmp;
+                IMAGE_2DT sum0_tmp = r_tmp(15,0);
+                IMAGE_2DT sum1_tmp = r_tmp(33,18);
+                if(flag0 != flag2)
+                    sum0_tmp = ~sum0_tmp + 1;
+                if(flag1 != flag2)
+                    sum1_tmp = ~sum1_tmp + 1;
+                result_sum0 += sum0_tmp;
+                result_sum1 += sum1_tmp;
 #ifdef DEBUG_CONV
-                    printf("l%d:(f0:%3d, f1:%3d)*(s:%3d) = ",l,(weight0_tmp . to_int()),(weight1_tmp . to_int()),(shift_tmp . to_int()));
-                    IMAGE_DT f0 = w_tmp(7,0);
-                    IMAGE_DT f1 = w_tmp(25,18);
-                    printf("(f0:%3d, f1:%3d)*(s:%3d) ",(f0 . to_int()),(f1 . to_int()),(s_tmp . to_int()));
-                    printf("s0:%d, s1:%d ",(sum0_tmp . to_int()),(sum1_tmp . to_int()));
-                    printf("sum0:%d, sum1:%d ",(result_sum0 . to_int()),(result_sum1 . to_int()));
-                    printf("\n");
-#endif
-                #else
-                    IMAGE_DT shift_tmp = shift[l][size - w - 1][h]((k+1)*8-1, k*8);
-                    IMAGE_DT weights_in_tmp = weights_in[(l * 4 + k) * size * size + h * size + w];
-                    result_sum += shift_tmp * weights_in_tmp;
-                #endif
-                }
-#ifdef DEBUG_CONV
-                printf("\n");
+//                printf("l%d:(f0:%3d, f1:%3d)*(s:%3d) = ",l,(weight0_tmp . to_int()),(weight1_tmp . to_int()),(shift_tmp . to_int()));
+//                IMAGE_DT f0 = w_tmp(7,0);
+//                IMAGE_DT f1 = w_tmp(25,18);
+//                printf("(f0:%3d, f1:%3d)*(s:%3d) ",(f0 . to_int()),(f1 . to_int()),(s_tmp . to_int()));
+//                printf("s0:%d, s1:%d ",(sum0_tmp . to_int()),(sum1_tmp . to_int()));
+//                printf("sum0:%d, sum1:%d ",(result_sum0 . to_int()),(result_sum1 . to_int()));
+//                printf("\n");
 #endif
             }
+#ifdef DEBUG_CONV
+            printf("\n");
+#endif
         }
 #ifdef DEBUG_CONV
         printf("\n");
 #endif
     }
-    #ifdef DSP_PACK
     stream_sum_out[0] . write(result_sum0);
     stream_sum_out[1] . write(result_sum1);
-    #else
-    stream_sum_out . write(result_sum);
-    #endif
 }    
 
 void shift_reg(
-    IMAGE_4DT shift[TILING_IMAGE/4][3][3],
-    IMAGE_4DT line_buffer[TILING_IMAGE/4][3][420], 
+    IMAGE_DT shift[TILING_IMAGE][3][3],
+    IMAGE_DT line_buffer[TILING_IMAGE][3][420], 
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > stream_shift_in[2][4],
     int stride,
     int size,
-    int i) 
-{
+    int i) {
     if (i == 0) {
-        for (int l = 0; l < TILING_IMAGE / 4; l++){ 
+        for (int l = 0; l < TILING_IMAGE; l++){ 
             for (int w = 0; w < size; w++) {
                 for (int h = 0; h < size; h++){ 
                     shift[l][w][h] = 0;
@@ -914,37 +932,37 @@ void shift_reg(
         input_buf[0][1] = stream_shift_in[0][2*(i%2)+1] . read();
         input_buf[1][0] = stream_shift_in[1][2*(i%2)+0] . read();
         input_buf[1][1] = stream_shift_in[1][2*(i%2)+1] . read();
-        for (int l = 0; l < TILING_IMAGE/4; l++) {
+        for (int l = 0; l < TILING_IMAGE; l++) {
             for (int st = 0; st < 2; st++) {
                 line_buffer[l][0][i * 2 + st] = line_buffer[l][2][i * 2 + st];
             }
 #ifdef DEBUG_CONV
-            if(l == 0){
-                for (int h = 0; h < size; h++) {
-                    for (int w = 0; w < 418; w++) {
-                        IMAGE_DT a = line_buffer[0][h][w];
-                        printf("input1[0][%d][%d] = %d ", h, w,(a . to_int()));
-                    }
-                    printf("\n");
-                }
-                printf("\n");
-            }
+//            if(l == 0){
+//                for (int h = 0; h < size; h++) {
+//                    for (int w = 0; w < 418; w++) {
+//                        IMAGE_DT a = line_buffer[0][h][w];
+//                        printf("input1[0][%d][%d] = %d ", h, w,(a . to_int()));
+//                    }
+//                    printf("\n");
+//                }
+//                printf("\n");
+//            }
 #endif
-            line_buffer[l][1][i * 2 + 0] = input_buf[0][0]((((l + 1)*4) * ORG_DATA_WIDTH - 1), ((l*4) * ORG_DATA_WIDTH));
-            line_buffer[l][1][i * 2 + 1] = input_buf[0][1]((((l + 1)*4) * ORG_DATA_WIDTH - 1), ((l*4) * ORG_DATA_WIDTH));
-            line_buffer[l][2][i * 2 + 0] = input_buf[1][0]((((l + 1)*4) * ORG_DATA_WIDTH - 1), ((l*4) * ORG_DATA_WIDTH));
-            line_buffer[l][2][i * 2 + 1] = input_buf[1][1]((((l + 1)*4) * ORG_DATA_WIDTH - 1), ((l*4) * ORG_DATA_WIDTH));
+            line_buffer[l][1][i * 2 + 0] = input_buf[0][0](((l+1) * ORG_DATA_WIDTH - 1), (l * ORG_DATA_WIDTH));
+            line_buffer[l][1][i * 2 + 1] = input_buf[0][1](((l+1) * ORG_DATA_WIDTH - 1), (l * ORG_DATA_WIDTH));
+            line_buffer[l][2][i * 2 + 0] = input_buf[1][0](((l+1) * ORG_DATA_WIDTH - 1), (l * ORG_DATA_WIDTH));
+            line_buffer[l][2][i * 2 + 1] = input_buf[1][1](((l+1) * ORG_DATA_WIDTH - 1), (l * ORG_DATA_WIDTH));
 #ifdef DEBUG_CONV
-            if(l == 0){
-                for (int h = 0; h < size; h++) {
-                    for (int w = 0; w < 418; w++) {
-                        IMAGE_DT a = line_buffer[0][h][w];
-                        printf("input2[0][%d][%d] = %d ", h, w,(a . to_int()));
-                    }
-                    printf("\n");
-                }
-                printf("\n");
-            }
+//            if(l == 0){
+//                for (int h = 0; h < size; h++) {
+//                    for (int w = 0; w < 418; w++) {
+//                        IMAGE_DT a = line_buffer[0][h][w];
+//                        printf("input2[0][%d][%d] = %d ", h, w,(a . to_int()));
+//                    }
+//                    printf("\n");
+//                }
+//                printf("\n");
+//            }
 #endif
 
             for (int h = 0; h < size; h++) {
@@ -960,35 +978,35 @@ void shift_reg(
         ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > input_buf[2];
         input_buf[0] = stream_shift_in[0][i%4] . read();
         input_buf[1] = stream_shift_in[1][i%4] . read();
-        for (int l = 0; l < TILING_IMAGE/4; l++) {
+        for (int l = 0; l < TILING_IMAGE; l++) {
             for (int h = 0; h < size - 1; h++) {
                 line_buffer[l][h][i] = line_buffer[l][h + 1][i];
             }
 #ifdef DEBUG_CONV
-            if(l == 0){
-                for (int h = 0; h < size; h++) {
-                    for (int w = 0; w < 418; w++) {
-                        IMAGE_DT a = line_buffer[0][h][w];
-                        printf("input0[0][%d][%d] = %d ", h, w,(a . to_int()));
-                    }
-                    printf("\n");
-                }
-                printf("\n");
-            }
+//            if(l == 0){
+//                for (int h = 0; h < size; h++) {
+//                    for (int w = 0; w < 418; w++) {
+//                        IMAGE_DT a = line_buffer[0][h][w];
+//                        printf("input0[0][%d][%d] = %d ", h, w,(a . to_int()));
+//                    }
+//                    printf("\n");
+//                }
+//                printf("\n");
+//            }
 #endif
-            ap_int< ORG_DATA_WIDTH*4 > tmp_buf = input_buf[0]((((l + 1)*4) * ORG_DATA_WIDTH - 1), (((l*4) * ORG_DATA_WIDTH)));
+            ap_int< ORG_DATA_WIDTH > tmp_buf = input_buf[0](((l+1) * ORG_DATA_WIDTH - 1), (l * ORG_DATA_WIDTH));
             line_buffer[l][size - 1][i] = tmp_buf;
 #ifdef DEBUG_CONV
-            if(l == 0){
-                for (int h = 0; h < size; h++) {
-                    for (int w = 0; w < 418; w++) {
-                        IMAGE_DT a = line_buffer[0][h][w];
-                        printf("input1[0][%d][%d] = %d ", h, w,(a . to_int()));
-                    }
-                    printf("\n");
-                }
-                printf("\n");
-            }
+//            if(l == 0){
+//                for (int h = 0; h < size; h++) {
+//                    for (int w = 0; w < 418; w++) {
+//                        IMAGE_DT a = line_buffer[0][h][w];
+//                        printf("input1[0][%d][%d] = %d ", h, w,(a . to_int()));
+//                    }
+//                    printf("\n");
+//                }
+//                printf("\n");
+//            }
 #endif
             for (int w = 0; w < size - 1; w++) {
                 int k = size - 1 - w;
@@ -1002,42 +1020,30 @@ void shift_reg(
         }
     }
 #ifdef DEBUG_CONV
-    for (int h = 0; h < size; h++) {
-       for (int w = 0; w < size; w++) {
-           IMAGE_DT a = shift[0][size - 1 - w][h];
-           printf("shift_ok[%d] = %d ", h * size + w,(a . to_int()));
-       }
-       printf("\n");
-    }
+//    for (int h = 0; h < size; h++) {
+//       for (int w = 0; w < size; w++) {
+//           IMAGE_DT a = shift[0][size - 1 - w][h];
+//           printf("shift_ok[%d] = %d ", h * size + w,(a . to_int()));
+//       }
+//       printf("\n");
+//    }
 #endif
 }
 
 void compute_one_cube(
-    IMAGE_4DT line_buffer[TILING_IMAGE/4][3][420], 
-    #ifdef DSP_PACK
+    IMAGE_DT line_buffer[TILING_IMAGE][3][420], 
     IMAGE_2DT weights_in[PARALLEL_FILTER/2][TILING_IMAGE*3*3], 
-    #else
-    IMAGE_DT weights_in[PARALLEL_FILTER][TILING_IMAGE*3*3], 
-    #endif
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > stream_shift_in[2][4], 
-    #ifdef DSP_PACK
     hls::stream< IMAGE_4DT > stream_sum_out[PARALLEL_FILTER/2][2], 
-    #else
-    hls::stream< IMAGE_4DT > stream_sum_out[PARALLEL_FILTER], 
-    #endif
     int z, int in_w, int in_h, int size, int stride, int pad, int new_h,
-    int loop_h, int loop_w)
-{
+    int loop_h, int loop_w) {
 #ifdef DEBUG_CONV
     printf("start_compute_one_plan_sub \n");
     printf("in_w %d in_h %d, size %d pad %d, z %d, stride:%d\n",in_w, in_h,3,1,z,stride);
     printf("z:%d, new_h:%d\n",z, new_h);
     printf("h loop:%d, w loop:%d\n", new_h / stride,((in_w + pad - stride + 1) / stride + FACTORS / stride - 1) / (FACTORS / stride));
 #endif
-    
-    IMAGE_4DT shift[TILING_IMAGE/4][3][3];
-    //int loop_h = new_h / stride;
-    //int loop_w = (in_w + pad - stride + 1) / stride;
+    IMAGE_DT shift[TILING_IMAGE][3][3];
     if(loop_w == 17) {
         loop_w = 14;
         in_w = 13;
@@ -1047,23 +1053,10 @@ void compute_one_cube(
         #pragma ACCEL pipeline flatten
         for (int w = 0; w < loop_w; w++) {
             #pragma HLS loop_tripcount min = 420 max = 420
-            //printf("h:%d/%d, w:%d/%d\n",h+1,new_h / stride,w+1,((in_w + 1 - stride + 1) / stride + WIDE_BUS_WIDTH / 8 / 16 / stride - 1) / (512 / 8 / 16 / stride));
             shift_reg(shift, line_buffer, stream_shift_in, stride, size, w);
-            
-#ifdef DEBUG_CONV
-            printf("count:%3d %3d %3d\n", h, w, (in_w + pad - stride + 1)/stride);
-#endif
-            //if (w >= size - pad - stride && w < (in_w + pad - stride + 1)/stride) {
             if (w >= size - pad - stride) {
                 #pragma ACCEL parallel
-                #ifdef DSP_PACK
                 for(int p = 0; p < PARALLEL_FILTER / 2; p++) {
-                #else
-                for(int p = 0; p < PARALLEL_FILTER; p++) {
-                #endif
-#ifdef DEBUG_CONV
-                    printf("p:%3d\n", p);
-#endif
                     conv_3x3_core(shift, weights_in[p], stream_sum_out[p], size);
                 }
             }
@@ -1074,109 +1067,456 @@ void compute_one_cube(
 #endif
 }
 
+void feed_in_weight(
+    IMAGE_256DT weights_in[3][3], 
+    hls::stream< IMAGE_256DT > sys_weight_in[4][3][3],
+    int size, int stride, int loop_h, int loop_w) {
+    printf("start feed_in_weight \n");
+//    if(loop_w == 17) {
+//        loop_w = 15;
+//    } else if(loop_w == 29) {
+//        loop_w = 28;
+//    } else {
+//        loop_w += 1;
+//    }
+    int count0 = 0;
+    int count1 = 0;
+    int count2 = 0;
+    for (int h = 0; h < loop_h; h++) {
+        #pragma HLS loop_tripcount min = 13 max = 13
+        #pragma ACCEL pipeline flatten
+        for (int w = 0; w < loop_w + 2; w++) {
+            #pragma HLS loop_tripcount min = 420 max = 420
+            if(w < loop_w) {
+                for (int i = 0; i < 3; i++) {
+                    sys_weight_in[0][0][i].write(weights_in[2][i]);
+                    count0++;
+                }
+            }
+            if(w > 0 && w < loop_w + 1) {
+                for (int i = 0; i < 3; i++) {
+                    sys_weight_in[0][1][i].write(weights_in[1][i]);
+                    count1++;
+                }
+            } 
+            if(w > 1) {
+                for (int i = 0; i < 3; i++) {
+                    sys_weight_in[0][2][i].write(weights_in[0][i]);
+                    count2++;
+                }
+            } 
+        }
+    }
+    printf("feed_in_weight count0 = %d, count1 = %d, count2 = %d\n", count0, count1, count2);
+#ifdef DEBUG_CONV
+    printf("finish feed_in_weight\n");
+#endif
+}
+
+void feed_in_weight_last_out(
+    hls::stream< IMAGE_256DT > sys_weight_in[3][3],
+    int size, int stride, int loop_h, int loop_w) {
+    printf("start feed_in_weight_last_out \n");
+//    if(loop_w == 17) {
+//        loop_w = 15;
+//    } else if(loop_w == 29) {
+//        loop_w = 28;
+//    } else {
+//        loop_w += 1;
+//    }
+    int count0 = 0;
+    int count1 = 0;
+    int count2 = 0;
+    for (int h = 0; h < loop_h; h++) {
+        #pragma HLS loop_tripcount min = 13 max = 13
+        #pragma ACCEL pipeline flatten
+        for (int w = 0; w < loop_w + 2; w++) {
+            #pragma HLS loop_tripcount min = 420 max = 420
+            if(w < loop_w) {
+                for (int i = 0; i < 3; i++) {
+                    sys_weight_in[0][i].read();
+                    count0++;
+                }
+            }
+            if(w > 0 && w < loop_w + 1) {
+                for (int i = 0; i < 3; i++) {
+                    sys_weight_in[1][i].read();
+                    count1++;
+                }
+            }
+            if(w > 1) {
+                for (int i = 0; i < 3; i++) {
+                    sys_weight_in[2][i].read();
+                    count2++;
+                }
+            }
+        }
+    }
+    printf("feed_in_weight_last_out count0 = %d, count1 = %d, count2 = %d\n", count0, count1, count2);
+#ifdef DEBUG_CONV
+    printf("finish feed_in_weight_last_out\n");
+#endif
+}
+
+void feed_in_data(
+    IMAGE_16DT line_buffer[3][420], 
+    hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > stream_shift_in[2][4], 
+    hls::stream< IMAGE_16DT > sys_data_in[3],
+    int size, int stride, int loop_h, int loop_w) {
+    printf("start feed_in_data \n");
+//    if(loop_w == 17) {
+//        loop_w = 15;
+//    } else if(loop_w == 29) {
+//        loop_w = 28;
+//    } else {
+//        loop_w += 1;
+//    }
+    int count0 = 0;
+    int count1 = 0;
+    int count2 = 0;
+    int count3 = 0;
+    for (int h = 0; h < loop_h; h++) {
+        #pragma HLS loop_tripcount min = 13 max = 13
+        #pragma ACCEL pipeline flatten
+        for (int w = 0; w < loop_w + 2; w++) {
+            #pragma HLS loop_tripcount min = 420 max = 420
+            if(w < loop_w) {
+                IMAGE_16DT input_buf[2];
+                input_buf[0] = stream_shift_in[0][w%4] . read();
+                input_buf[1] = stream_shift_in[1][w%4] . read();
+                count3++;
+                if (stride == 2) {
+                    line_buffer[0][w] = line_buffer[2][w];
+                    line_buffer[1][w] = input_buf[0];
+                    line_buffer[2][w] = input_buf[1];
+                } else {
+                    line_buffer[0][w] = line_buffer[1][w];
+                    line_buffer[1][w] = line_buffer[2][w];
+                    line_buffer[2][w] = input_buf[0];
+                }
+            }
+            if(w < loop_w) {
+                sys_data_in[0].write(line_buffer[0][w]);
+                count0++;
+            }
+            if(w > 0 && w < loop_w + 1) {
+                sys_data_in[1].write(line_buffer[1][w-1]);
+                count1++;
+            }
+            if(w > 1) {
+                sys_data_in[2].write(line_buffer[2][w-2]);
+                count2++;
+            }
+        }
+    }
+    printf("feed_in_data count0 = %d, count1 = %d, count2 = %d, count3 = %d\n", count0, count1, count2, count3);
+#ifdef DEBUG_CONV
+    printf("finish feed_in_data\n");
+#endif
+}
+
+void feed_in_data_last_out(
+    hls::stream< IMAGE_16DT > sys_data_in[3],
+    int size, int stride, int loop_h, int loop_w) {
+    printf("start feed_in_data_last_out \n");
+//    if(loop_w == 17) {
+//        loop_w = 15;
+//    } else if(loop_w == 29) {
+//        loop_w = 28;
+//    } else {
+//        loop_w += 1;
+//    }
+    int count0 = 0;
+    int count1 = 0;
+    int count2 = 0;
+    for (int h = 0; h < loop_h; h++) {
+        #pragma HLS loop_tripcount min = 13 max = 13
+        #pragma ACCEL pipeline flatten
+        for (int w = 0; w < loop_w + 2; w++) {
+            #pragma HLS loop_tripcount min = 420 max = 420
+            if(w < loop_w) {
+                sys_data_in[0].read();
+                count0++;
+            }
+            if(w > 0 && w < loop_w + 1) {
+                sys_data_in[1].read();
+                count1++;
+            }
+            if(w > 1) {
+                sys_data_in[2].read();
+                count2++;
+            }
+        }
+    }
+    printf("feed_in_data_last_out count0 = %d, count1 = %d, count2 = %d\n", count0, count1, count2);
+#ifdef DEBUG_CONV
+    printf("finish feed_in_data_last_out\n");
+#endif
+}
+
+void feed_out_data(
+    hls::stream< IMAGE_4DT > sys_data_out[3][PARALLEL_FILTER],
+    hls::stream< IMAGE_4DT > stream_sum_out[PARALLEL_FILTER], 
+    int size, int stride, int loop_h, int loop_w) {
+//    if(loop_w == 17) {
+//        loop_w = 15;
+//    } else if(loop_w == 29) {
+//        loop_w = 28;
+//    } else {
+//        loop_w += 1;
+//    }
+    int count0 = 0;
+    int count1 = 0;
+    int count2 = 0;
+    int count3 = 0;
+    for (int h = 0; h < loop_h; h++) {
+        #pragma HLS loop_tripcount min = 13 max = 13
+        #pragma ACCEL pipeline flatten
+        for (int w = 0; w < loop_w+2; w++) {
+            #pragma HLS loop_tripcount min = 420 max = 420
+            IMAGE_4DT a[PARALLEL_FILTER] = {0};
+            IMAGE_4DT b[PARALLEL_FILTER] = {0};
+            IMAGE_4DT c[PARALLEL_FILTER] = {0};
+            //IMAGE_4DT sum[PARALLEL_FILTER];
+            if(w < loop_w) {
+                for (int l = 0; l < PARALLEL_FILTER; l++) {
+                    a[l] = sys_data_out[0][l].read();
+                    //sum[l] += a;
+                    count0++;
+                }
+            }
+            if(w > 0 && w < loop_w + 1) {
+                for (int l = 0; l < PARALLEL_FILTER; l++) {
+                    b[l] = sys_data_out[1][l].read();
+                    //sum[l] += b;
+                    count1++;
+                }
+            }
+            if(w > 1) {
+                for (int l = 0; l < PARALLEL_FILTER; l++) {
+                    c[l] = sys_data_out[2][l].read();
+                    //sum[l] += c;
+                    count2++;
+                }
+            }
+            // if stride = 2, take half of the output as valid
+            int valid = (stride == 1) || (stride == 2 && w % 2 == 0);
+            if(w > 1 && w < loop_w && valid) {
+                for (int l = 0; l < PARALLEL_FILTER; l++) {
+                    //stream_sum_out[l].write(sum[l]);
+                    stream_sum_out[l].write(a[l] + b[l] + c[l]);
+                    count3++;
+                }
+            }
+        }
+    }
+    printf("feed_out_data count0 = %d, count1 = %d, count2 = %d, count3=%d\n", count0, count1, count2, count3);
+#ifdef DEBUG_CONV
+    printf("finish feed_out_data\n");
+#endif
+}
+
+void feed_out_data_first_in(
+    hls::stream< IMAGE_4DT > sys_data_out[3][PARALLEL_FILTER],
+    int size, int stride, int loop_h, int loop_w) {
+    printf("start feed_out_data_first_in \n");
+//    if(loop_w == 17) {
+//        loop_w = 15;
+//    } else if(loop_w == 29) {
+//        loop_w = 28;
+//    } else {
+//        loop_w += 1;
+//    }
+    int count0 = 0;
+    int count1 = 0;
+    int count2 = 0;
+    for (int h = 0; h < loop_h; h++) {
+        #pragma HLS loop_tripcount min = 13 max = 13
+        #pragma ACCEL pipeline flatten
+        for (int w = 0; w < loop_w+2; w++) {
+            #pragma HLS loop_tripcount min = 420 max = 420
+            if(w < loop_w) {
+                for (int l = 0; l < PARALLEL_FILTER; l++) {
+                    sys_data_out[0][l].write(0);
+                    count0++;
+                }
+            }
+            if(w > 0 && w < loop_w + 1) {
+                for (int l = 0; l < PARALLEL_FILTER; l++) {
+                    sys_data_out[1][l].write(0);
+                    count1++;
+                }
+            }
+            if(w > 1) {
+                for (int l = 0; l < PARALLEL_FILTER; l++) {
+                    sys_data_out[2][l].write(0);
+                    count2++;
+                }
+            }
+        }
+    }
+    printf("feed_out_data_first_in count0 = %d, count1 = %d, count2 = %d\n", count0, count1, count2);
+#ifdef DEBUG_CONV
+    printf("finish feed_out_data_first_int\n");
+#endif
+}
+
+void compute_PE(
+    hls::stream< IMAGE_16DT > &sys_data_in_in,
+    hls::stream< IMAGE_16DT > &sys_data_in_out,
+    hls::stream< IMAGE_256DT > sys_weight_in_in[3],
+    hls::stream< IMAGE_256DT > sys_weight_in_out[3],
+    hls::stream< IMAGE_4DT > sys_data_out_in[PARALLEL_FILTER],
+    hls::stream< IMAGE_4DT > sys_data_out_out[PARALLEL_FILTER],
+    int sys_col, int sys_row, int size, int stride, int loop_h, int loop_w) {
+#pragma HLS inline off
+    printf("compute_PE start, sys_col = %d, sys_row = %d\n", sys_col, sys_row);
+//    if(loop_w == 17) {
+//        loop_w = 15;
+//    } else if(loop_w == 29) {
+//        loop_w = 28;
+//    } else {
+//        loop_w += 1;
+//    }
+    int count0 = 0;
+    int count1 = 0;
+    int count2 = 0;
+    for (int h = 0; h < loop_h; h++) {
+        #pragma HLS loop_tripcount min = 13 max = 13
+        #pragma ACCEL pipeline flatten
+        for (int w = 0; w < loop_w; w++) {
+            #pragma HLS loop_tripcount min = 420 max = 420
+            IMAGE_256DT weights_tmp_s = 0;
+            for (int i = 0; i < 3; i++) {
+                IMAGE_256DT tmp = sys_weight_in_in[i].read();
+                sys_weight_in_out[i].write(tmp);
+                if(i == sys_col) {
+                    weights_tmp_s = tmp;
+                }
+                count1++;
+            }
+            IMAGE_16DT data = sys_data_in_in.read();
+            sys_data_in_out.write(data);
+            count0++;
+            for (int p1 = 0; p1 < PARALLEL_FILTER/2; p1++) {
+                IMAGE_4DT result_sum0 = 0;
+                IMAGE_4DT result_sum1 = 0;
+                result_sum0 = sys_data_out_in[p1*2+0].read();
+                result_sum1 = sys_data_out_in[p1*2+1].read();
+                for (int p2 = 0; p2 < TILING_IMAGE; p2++) {
+                    int index = p1*PARALLEL_FILTER/2 + p2;
+                    IMAGE_DT shift_tmp = data((p2+1)*ORG_DATA_WIDTH-1, p2*ORG_DATA_WIDTH);
+                    IMAGE_2DT weights_tmp = weights_tmp_s((index + 1) * 16 - 1, index * 16);
+                    IMAGE_DT weight0_tmp = weights_tmp(7,0);
+                    IMAGE_DT weight1_tmp = weights_tmp(15,8);
+                    bool flag0 = weight0_tmp(7, 7);
+                    bool flag1 = weight1_tmp(7, 7);
+                    bool flag2 = shift_tmp(7, 7);
+                    ap_uint<26> w_tmp;
+                    ap_uint<8> w_tmp_reg0;
+                    ap_uint<8> w_tmp_reg1;
+                    if(flag0 == 1)
+                        w_tmp_reg0(7, 0) = ~weight0_tmp(7, 0) + 1;
+                    else
+                        w_tmp_reg0(7, 0) = weight0_tmp(7, 0);
+                    w_tmp(7, 0) = w_tmp_reg0(7, 0);
+                    w_tmp(17, 8) = 0;
+                    if(flag1 == 1)
+                        w_tmp_reg1(7, 0) = ~weight1_tmp(7, 0) + 1;
+                    else
+                        w_tmp_reg1(7, 0) = weight1_tmp(7, 0);
+                    w_tmp(25,18) = w_tmp_reg1(7, 0);
+                    ap_int<8> s_tmp;
+                    if(flag2 == 1)
+                        s_tmp(7,0) = ~shift_tmp(7,0) + 1;
+                    else
+                        s_tmp(7,0) = shift_tmp(7,0);
+                    ap_int<44> r_tmp = s_tmp * w_tmp;
+                    IMAGE_2DT sum0_tmp = r_tmp(15,0);
+                    IMAGE_2DT sum1_tmp = r_tmp(33,18);
+                    if(flag0 != flag2)
+                        sum0_tmp = ~sum0_tmp + 1;
+                    if(flag1 != flag2)
+                        sum1_tmp = ~sum1_tmp + 1;
+                    result_sum0 += sum0_tmp;
+                    result_sum1 += sum1_tmp;
+                }
+                sys_data_out_out[p1*2+0].write(result_sum0);
+                sys_data_out_out[p1*2+1].write(result_sum1);
+                count2 += 2;
+            }
+        }
+    }
+    printf("compute_PE finish count0 = %d, count1 = %d, count2 = %d\n", count0, count1, count2);
+}
+
 void adder_out(
-    #ifdef DSP_PACK
-    hls::stream< IMAGE_4DT > stream_data_in[PARALLEL_FILTER/2][2], 
-    #else
     hls::stream< IMAGE_4DT > stream_data_in[PARALLEL_FILTER], 
-    #endif
     hls::stream< CONV_DT > stream_data_out[PARALLEL_FILTER], 
-    #ifdef RUNSIM
-    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416],
-    #endif
     int z, int s, int in_w, int in_c, int size, int stride, int pad, int new_h,
     int h_col, int w_col)
 {
-
-    #ifdef BITGEN
     IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
-    #endif
     //int h_col = (new_h + 2 * pad - size) / stride + 1;
     //int w_col = (in_w + 2 * pad - size) / stride + 1;
+    if(w_col == 14) { w_col = 13; }
     if(w_col == 16) { w_col = 13; }
-#ifdef DEBUG_BURST
+    if(w_col == 28) { w_col = 26; }
     printf("start_adder_out \n");
+#ifdef DEBUG_BURST
     printf("z:%d, s:%d, in_w %d size %d pad %d, stride:%d\n",z,s,in_w,size,pad,stride);
     printf("w_col:%d, h_col:%d\n",w_col,h_col);
 #endif
+    int count0 = 0;
+    int count1 = 0;
     for (int i = 0; i < h_col * w_col; i++) {
         #pragma HLS pipeline
         #pragma HLS loop_tripcount min = 5408 max = 5408
         #pragma ACCEL parallel
-        #ifdef DSP_PACK
-        for (int p = 0; p < PARALLEL_FILTER / 2; p++) {
-            IMAGE_4DT tmp0 = stream_data_in[p][0] . read();
-            IMAGE_4DT tmp1 = stream_data_in[p][1] . read();
-        #else
         for (int p = 0; p < PARALLEL_FILTER; p++) {
             IMAGE_4DT tmp0 = stream_data_in[p] . read();
-        #endif
+            count0++;
             if (s == 0) {
-                #ifdef DSP_PACK
-                conv_sum[p*2+0][i] = tmp0;
-                conv_sum[p*2+1][i] = tmp1;
-                #else
                 conv_sum[p][i] = tmp0;
-                #endif
             }
             else {
-                #ifdef DSP_PACK
-                conv_sum[p*2+0][i] += tmp0;
-                conv_sum[p*2+1][i] += tmp1;
-                #else
                 conv_sum[p][i] += tmp0;
-                #endif
             }
             if (s == in_c / TILING_IMAGE - 1) {
-                #ifdef DSP_PACK
-                CONV_DT buf0_output = conv_sum[p*2+0][i];
-                CONV_DT buf1_output = conv_sum[p*2+1][i];
-                stream_data_out[p*2+0] . write(buf0_output);
-                stream_data_out[p*2+1] . write(buf1_output);
-                #else
                 CONV_DT buf0_output = conv_sum[p][i];
                 stream_data_out[p] . write(buf0_output);
-                #endif
+                count1++;
 #ifdef DEBUG_CONV
-                #ifdef DSP_PACK
-                printf("conv_sum[%3d][%3d] = (%3d, %3d) ", i / w_col, i % w_col, (buf0_output . to_int()), (buf1_output . to_int()));
-                #else
-                printf("conv_sum[%3d][%3d] = %3d ", i / w_col, i % w_col, (buf0_output . to_int()));
-                #endif
+                if(p == 0){
+                    printf("conv_sum[%3d][%3d] = %3d ", i / w_col, i % w_col, (buf0_output . to_int()));
+                    if (i % w_col == w_col - 1) {
+                        printf("\n");
+                    }
                 }
 #endif
             }
 #ifdef DEBUG_CONV
             else {
-                CONV_DT buf0_output = conv_sum[p*2+0][i];
-                CONV_DT buf1_output = conv_sum[p*2+1][i];
-                #ifdef DSP_PACK
-                printf("[p%d] conv_sum_tmp[%3d][%3d] = (%3d, %3d) ", p,i / w_col, i % w_col, (buf0_output . to_int()), (buf1_output . to_int()));
-                #else
-                printf("[p%d] conv_sum_tmp[%3d][%3d] = %3d ", p, i / w_col, i % w_col, (buf0_output . to_int()));
-                #endif
+                if(p == 0){
+                    printf("conv_sum_tmp[%3d][%3d] = %3d ", i / w_col, i % w_col, (conv_sum[0][i] . to_int()));
+                    if (i % w_col == w_col - 1) {
+                        printf("\n");
+                    }
                 }
             }
 #endif
         }
-#ifdef DEBUG_CONV
-    printf("\n");
-#endif
     }
+    printf("finish_adder_out count0 = %d, count1 = %d\n", count0, count1);
 #ifdef DEBUG_CONV
-    printf("finish_adder_out \n");
 #endif
 }
 
 void conv_3x3_cuboid(
-    IMAGE_4DT line_buffer[TILING_IMAGE/4][3][420],
+    IMAGE_16DT line_buffer[3][420],
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_ping, 
     hls::stream< ap_int< WIDE_BUS_WIDTH > > &stream_in_pang, 
-    #ifdef DSP_PACK
-    IMAGE_2DT weights_in[PARALLEL_FILTER/2][TILING_IMAGE*3*3], 
-    #else
-    IMAGE_DT weights_in[PARALLEL_FILTER][TILING_IMAGE*3*3], 
-    #endif
+    IMAGE_256DT weights_in[3][3], 
     hls::stream< CONV_DT > stream_out[PARALLEL_FILTER], 
     bool &flag_fifo, int z, int s, int in_w, int in_h, int in_c, int split_h, int size, int stride, int pad,
     int loop_1, int loop_2, int loop_3, int h_col, int w_col,
@@ -1192,32 +1532,62 @@ void conv_3x3_cuboid(
         loop_1 = new_h >> 1;
         h_col = new_h >> 1;
         //h_col = ((new_h - 1) >> 1) + 1;
+        if(loop_3 == 14) { loop_3 = 28;
+        } else if(loop_3 == 208) { loop_3 = 418;
+        } else if(loop_3 == 104) { loop_3 = 210;
+        } else if(loop_3 == 52)  { loop_3 = 106;
+        } else if(loop_3 == 26)  { loop_3 = 54;
+        }
+    } else {
+        if(loop_3 == 17) {
+            loop_3 = 15;
+        } else if(loop_3 == 29) {
+            loop_3 = 28;
+        } else {
+            loop_3 += 1;
+        }
     }
-#ifdef DEBUG_BURST
+    printf("start conv_3x3_cuboid\n");
+//#ifdef DEBUG_BURST
     printf("conv 3x3: split_h=%d\n", split_h);
     printf("loop_1=%d, loop_2=%d, loop_3=%d\n", loop_1, loop_2, loop_3);
     printf("cond=%d, new_h_1=%d, new_h_2=%d\n", cond, new_h_1, new_h_2);
     printf("w_col=%d, h_col=%d\n",w_col,h_col);
-#endif
+//#endif
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > stream_shift_in[2][4];
     #pragma HLS stream variable = stream_shift_in depth = 512
-    #ifdef DSP_PACK
-    hls::stream< IMAGE_4DT > stream_sum_out[PARALLEL_FILTER/2][2];
-    #else
     hls::stream< IMAGE_4DT > stream_sum_out[PARALLEL_FILTER];
-    #endif
     #pragma HLS stream variable = stream_sum_out depth = 512
-    #ifdef RUNSIM
-    IMAGE_4DT conv_sum[PARALLEL_FILTER][SPLITING_FACTOR*416];
-    #endif
+    hls::stream< IMAGE_16DT > sys_data_in[4][3];
+    #pragma HLS stream variable = sys_data_in depth = 2
+    hls::stream< IMAGE_256DT > sys_weight_in[4][3][3];
+    #pragma HLS stream variable = sys_weight_in depth = 2
+    hls::stream< IMAGE_4DT > sys_data_out[4][3][TILING_IMAGE];
+    #pragma HLS stream variable = sys_data_out depth = 2
     #pragma HLS dataflow
     shift_in_data(stream_in_ping, stream_in_pang, stream_shift_in, flag_fifo, z, in_w, in_h, split_h, size, stride, pad, new_h, loop_1, loop_2);
-    compute_one_cube(line_buffer, weights_in, stream_shift_in, stream_sum_out, z, in_w, in_h, size, stride, pad, new_h, loop_1, loop_3);
-    #ifdef RUNSIM
-    adder_out(stream_sum_out, stream_out, conv_sum, z, s, in_w, in_c, size, stride, pad, new_h,h_col, w_col);
-    #else
-    adder_out(stream_sum_out, stream_out, z, s, in_w, in_c, size, stride, pad, new_h,h_col, w_col);
-    #endif
+    //compute_one_cube(line_buffer, weights_in, stream_shift_in, stream_sum_out, z, in_w, in_h, size, stride, pad, new_h, loop_1, loop_3);
+    feed_in_data(line_buffer, stream_shift_in, sys_data_in[0], size, stride, loop_1, loop_3);
+    feed_in_weight(weights_in, sys_weight_in, size, stride, loop_1, loop_3);
+    feed_out_data_first_in(sys_data_out[0], size, stride, loop_1, loop_3);
+    for(int sys_col=0; sys_col<3; sys_col++) {
+        #pragma HLS unroll
+        for(int sys_row=0; sys_row<3; sys_row++) {
+            #pragma HLS unroll
+            compute_PE(
+                    sys_data_in[sys_col][sys_row],
+                    sys_data_in[sys_col+1][sys_row],
+                    sys_weight_in[sys_row][sys_col],
+                    sys_weight_in[sys_row+1][sys_col],
+                    sys_data_out[sys_row][sys_col],
+                    sys_data_out[sys_row+1][sys_col],
+                    sys_col, sys_row, size, stride, loop_1, loop_3);
+        }
+    }
+    feed_out_data(sys_data_out[3], stream_sum_out, size, stride, loop_1, loop_3);
+    feed_in_data_last_out(sys_data_in[3], size, stride, loop_1, loop_3);
+    feed_in_weight_last_out(sys_weight_in[3], size, stride, loop_1, loop_3);
+    adder_out(stream_sum_out, stream_out, z, s, in_w, in_c, size, stride, pad, new_h, h_col, w_col);
 }
 
 void conv_3x3_stream(
@@ -1262,14 +1632,10 @@ void conv_3x3_stream(
             for (int s = 0; s < in_c / TILING_IMAGE; s++) {
                 printf("conv 3x3: t %d/%d, z loop %d/%d, s %d/%d\n", t+1, n/PARALLEL_FILTER, z+1, in_h_13, s+1, in_c/TILING_IMAGE);
                 #pragma HLS loop_tripcount min = 2 max = 2
-                #ifdef DSP_PACK
-                IMAGE_2DT weights_in[PARALLEL_FILTER/2][TILING_IMAGE*3*3];
-                #else
-                IMAGE_DT weights_in[PARALLEL_FILTER][TILING_IMAGE*3*3];
-                #endif
-                IMAGE_4DT line_buffer[PARALLEL_FILTER/4][3][420];
+                IMAGE_256DT weights_in[3][3];
+                IMAGE_16DT line_buffer[3][420];
 
-                burst_in_weights(stream_weights, size, weights_in);
+                burst_in_weights(stream_weights, weights_in);
                 burst_in_line(line_buffer, stream_in_ping, stream_in_pang, flag_fifo, z, in_w, in_h, split_h, size, stride, pad, loop_2);
                 conv_3x3_cuboid(line_buffer, stream_in_ping, stream_in_pang, weights_in, stream_out, flag_fifo, z, s, in_w, in_h, in_c, split_h, size, stride, pad, loop_1, loop_2, loop_3, h_col, w_col,cond, new_h_1,new_h_2);
             }
@@ -1301,6 +1667,7 @@ void bias_stream(
     hls::stream< ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > > & stream_output, 
     const int config_list[32])
 {
+    printf("start bias stream\n");
     //int batch_normalize = config_list[12];
     int in_w = config_list[5];
     int n = config_list[7];
@@ -1312,6 +1679,8 @@ void bias_stream(
     printf("in_wh:%d ", in_wh);
     printf("n:%d, batch_normalize:%d, activation:%d\n",n,batch_normalize,activation);
 #endif
+    int count0 = 0;
+    int count1 = 0;
     IMAGE_4DT biases[PARALLEL_FILTER];
     for (int t = 0; t < n / PARALLEL_FILTER; t++) {
         #pragma HLS loop_tripcount min = 2 max = 2
@@ -1328,11 +1697,22 @@ void bias_stream(
             #pragma HLS pipeline
             #pragma HLS loop_tripcount min = 173056 max =173056
             ap_int< ORG_DATA_WIDTH > tmp_a[PARALLEL_FILTER];
-            if(index > 12 && in_w == 16) {
+            if(index > 12 && in_w == 16) { //13
                 stream_output . write(0);
+                count1++;
+            } else if(index > 12 && in_w == 14) { //26->13
+                stream_output . write(0);
+                count1++;
+            } else if(index > 25 && in_w == 28) { //26
+                stream_output . write(0);
+                count1++;
             } else {
                 for (int p = 0; p < PARALLEL_FILTER; p++) {
                     CONV_DT input_buf = stream_input[p] . read();
+                    count0++;
+                    //HAN
+                    /*
+                    */
                     CONV_DT sum0 = input_buf + biases[p];
                     IMAGE_DT sum1 = xilinx_quantizer_shift(sum0, right_shift_cnt);
                     IMAGE_DT sum2;
@@ -1349,7 +1729,7 @@ void bias_stream(
                     }
                     tmp_a[p] = sum2;
 #ifdef DEBUG_BIAS
-                    printf("[p%2d]debug_bias_data[%d] : bias[%3d] + in[%3d] = [%3d] -> q[%3d] -> act[%3d] ",p,i, biases[p].to_int(), input_buf.to_int(), sum0.to_int(), sum1.to_int(), sum2.to_int());
+                    printf("debug_bias_data[%d] : bias[%3d] + in[%3d] = [%3d] -> q[%3d] -> act[%3d] ",i, biases[p].to_int(), input_buf.to_int(), sum0.to_int(), sum1.to_int(), sum2.to_int());
 #endif
                 }
 #ifdef DEBUG_BIAS
@@ -1357,6 +1737,7 @@ void bias_stream(
 #endif
                 ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > output_buf = ((((((((((((((((tmp_a[15] , tmp_a[14] , tmp_a[13])) , tmp_a[12] , tmp_a[11])) , tmp_a[10] , tmp_a[9])) , tmp_a[8] , tmp_a[7])) , tmp_a[6] , tmp_a[5])) , tmp_a[4] , tmp_a[3])) , tmp_a[2] , tmp_a[1])) , tmp_a[0]));
                 stream_output . write(output_buf);
+                count1++;
             }
             index++;
             if(index == in_w) {
@@ -1364,6 +1745,7 @@ void bias_stream(
             }
         }
     }
+    printf("finish bias stream: count0 = %d\n", count0);
 }
 
 void bias_switch(
@@ -1403,12 +1785,10 @@ void shortcut_core(
             ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > input_buf2 = (buf_in_image[i]((f+1)*ORG_DATA_WIDTH*PARALLEL_FILTER-1, f*ORG_DATA_WIDTH*PARALLEL_FILTER));
             merlinL76:
             for (int p = 0; p < PARALLEL_FILTER; p++) {
-                ap_int< ORG_DATA_WIDTH > tmp_buf1 = (input_buf1(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
-                ap_int< ORG_DATA_WIDTH > tmp_buf2 = (input_buf2(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
-                IMAGE_4DT tmp_1 = tmp_buf1;
-                IMAGE_4DT tmp_2 = tmp_buf2;
-                IMAGE_4DT tmp_o1 = tmp_1 << right_shift_cnt0;
-                IMAGE_4DT tmp_o2 = tmp_2 << right_shift_cnt1;
+                IMAGE_4DT tmp_buf1 = (input_buf1(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
+                IMAGE_4DT tmp_buf2 = (input_buf2(((p + 1) * ORG_DATA_WIDTH - 1), (p * ORG_DATA_WIDTH)));
+                IMAGE_4DT tmp_o1 = tmp_buf1 << right_shift_cnt0;
+                IMAGE_4DT tmp_o2 = tmp_buf2 << right_shift_cnt1;
                 IMAGE_4DT tmp_o = (tmp_o1 + tmp_o2);
                 IMAGE_DT sum1 = xilinx_quantizer_shift(tmp_o, right_shift_cnt2);
                 tmp_a[p] = sum1;
@@ -1613,7 +1993,6 @@ void read_fifo(
     //int out_h_4 = out_h % FACTORS;
 
     ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > tmp_buf[4];
-    ap_int< ORG_DATA_WIDTH*PARALLEL_FILTER > tmp_buf2[4];
     merlinL89:
     for (int i = 0; i < read_fifo_line; i++) {
         #pragma hls loop_tripcount min=208 max=208
@@ -1641,15 +2020,21 @@ void read_fifo(
             printf("debug4_image_out[%3d][%3d]=%d ", i%out_h, j*4+3, (tmp3_buf . to_int()));
     #endif
         }
-        if(out_h_4 != 0) {
-            for(int j = 0; j < FACTORS; j++){
-                #pragma hls loop_tripcount min=4 max=4
-                tmp_buf[j] = 0;
-            }
-            for(int j = 0; j < out_h_4; j++){
-                #pragma hls loop_tripcount min=4 max=4
-                tmp_buf[j] = stream_data_in . read();
-            }
+        for(int j = 0; j < FACTORS; j++){
+            #pragma hls loop_tripcount min=4 max=4
+            tmp_buf[j] = 0;
+        }
+        merlinL95:
+        for(int j = 0; j < out_h_4; j++){
+            #pragma hls loop_tripcount min=4 max=4
+            tmp_buf[j] = stream_data_in . read();
+        }
+        merlinL93:
+        for(int j = 0; j < out_w - out_h; j++){
+            #pragma hls loop_tripcount min=3 max=3
+            stream_data_in . read();
+        }
+        if(out_h_4 != 0){
             data_out[i * new_w / FACTORS + out_h / FACTORS] = (((tmp_buf[3] , tmp_buf[2] , tmp_buf[1])) , tmp_buf[0]);
     #ifdef DEBUG_DATAOUT
             printf("index[%3d] ", i * new_w / 4 + out_h / 4);
@@ -1663,12 +2048,6 @@ void read_fifo(
             ap_int< 8 > tmp3_buf = (tmp_buf[3](((p + 1) * 8 - 1), (p * 8)));
             printf("debug0_image_out[%3d][%3d]=%d ", i%out_h, (out_h / 4)*4+3, (tmp3_buf . to_int()));
     #endif
-        }
-        if(out_w != out_h) {
-            for(int j = 0; j < out_w - out_h; j++){
-                #pragma hls loop_tripcount min=3 max=3
-                stream_data_in . read();
-            }
         }
     #ifdef DEBUG_DATAOUT
         printf("\n");
