@@ -1,4 +1,3 @@
-![Darknet Logo](http://pjreddie.com/media/files/darknet-black-small.png)
 
 # Darknet #
 Darknet is an open source neural network framework written in C and CUDA. It is fast, easy to install, and supports CPU and GPU computation.
@@ -8,8 +7,10 @@ Darknet is an open source neural network framework written in C and CUDA. It is 
 On U250:
 set FPGA=1 SOC=0 TF=0
 
+
 On ZCU102:
 set FPGA=1 SOC=1 TF=0
+
 
 make libgen: to generate opencl library
 
@@ -20,6 +21,7 @@ make runsim: generate emulation xclbin by merlin
 make bitgen: generate on board xclbin by merlin
 
 make run: to run for emulation
+
 
 RUN Tensor Flow:
 
@@ -39,11 +41,13 @@ python python/tf_demo.py path --batch 5 --img_path /local/hanhu/darknet_yolo3_q/
 
 conda deactivate
 
+
 Current performance:
 
 1. U250: 109ms
 
 2. ZCU: 170ms
+
 
 Todo:
 1. Support Double Pump DSP
