@@ -25,7 +25,6 @@ Darknet is an open source neural network framework written in C and CUDA. It is 
 
 # RUN Tensor Flow:
   set FPGA=1 SOC=1 TF=1
-## Environment Steup
 ```
   conda info
   conda create --name py37 python=3.7.9
